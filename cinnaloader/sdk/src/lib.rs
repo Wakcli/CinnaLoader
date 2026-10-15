@@ -44,6 +44,7 @@ use std::{
     sync::OnceLock,
 };
 
+pub mod ai;
 pub mod audio;
 pub mod blocks;
 pub mod camera;
@@ -62,6 +63,7 @@ pub mod enchantments;
 pub mod entities;
 pub mod equipment;
 pub mod events;
+pub mod fluids;
 pub mod fs;
 pub mod game;
 pub mod graphics;
@@ -86,6 +88,7 @@ pub mod physics;
 pub mod player;
 pub mod raycast;
 pub mod recipes;
+pub mod redstone;
 pub mod registry;
 pub mod render;
 pub mod resources;
