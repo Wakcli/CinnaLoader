@@ -1322,6 +1322,16 @@ pub mod prelude {
     pub use crate::physics::{
         self as physics, bounding_box, Body, Ray, RayHit, GRAVITY, TERMINAL_VELOCITY,
     };
+    pub use crate::network::{
+        self as network, Address, Codec as NetCodec, ConnId, Connection, ConnectionState,
+        ListenerId, NetError, RetryPolicy, Statistics as NetStatistics, Transport,
+    };
+    pub use crate::packets::{
+        self as packets, Buffer, Codec, Direction, Packet, PacketError, PacketState, TraceEntry,
+    };
+    pub use crate::particles::{
+        self as particles, EmissionShape, Emitter, Particle, ParticleType, VisualEffect,
+    };
     pub use crate::player::{
         self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics,
     };

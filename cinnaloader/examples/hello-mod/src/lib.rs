@@ -3581,6 +3581,386 @@ impl Mod for Hello {
             );
         });
 
+        // Section 41: particles a mod really simulates, and the drawing it cannot do.
+        tasks::schedule_after_ticks(64, move || {
+            if !demo(41) {
+                return;
+            }
+            info!(
+                "particles: register={} type={:?} types={}",
+                particles::register(
+                    ParticleType::new("hello:spark")
+                        .sprite("hello:spark")
+                        .size(0.2)
+                        .color([1.0, 0.8, 0.2, 1.0])
+                        .gravity(-9.8)
+                        .velocity((0.5, 2.0, 0.0))
+                        .blend(BlendMode::Additive)
+                        .max_age(2.0)
+                        .lifetime(1.0)
+                ),
+                particles::get_type("hello:spark").map(|kind| (
+                    kind.id.clone(),
+                    kind.sprite.clone(),
+                    kind.size,
+                    kind.max_age,
+                )),
+                particles::get_types().len(),
+            );
+            let one = particles::spawn_at("hello:spark", (0.0, 0.0, 0.0));
+            info!(
+                "particles: spawn={:?} at={:?} velocity={:?} count={}",
+                one,
+                one.and_then(particles::get).map(|held| held.position),
+                one.and_then(particles::get).map(|held| held.velocity),
+                particles::get_count(),
+            );
+            particles::tick(0.5);
+            info!(
+                "particles: after 0.5s position={:?} velocity={:?} age={:?}",
+                one.and_then(particles::get).map(|held| held.position),
+                one.and_then(particles::get).map(|held| held.velocity),
+                one.and_then(particles::get).map(|held| held.age),
+            );
+            particles::tick(1.6);
+            info!(
+                "particles: after 2.1s alive={} (max age 2.0 removed it)",
+                particles::get(one.unwrap_or(0)).is_some(),
+            );
+            let burst = particles::spawn_in_box(
+                "hello:spark",
+                (-1.0, -1.0, -1.0),
+                (1.0, 1.0, 1.0),
+                5,
+                42,
+            );
+            particles::tick(0.75);
+            let live = particles::get_active();
+            let all_inside = !live.is_empty()
+                && live.iter().all(|held| {
+                    held.position.0 >= -1.0
+                        && held.position.0 <= 1.0
+                        && held.position.1 >= -1.0
+                        && held.position.1 <= 1.0
+                        && held.position.2 >= -1.0
+                        && held.position.2 <= 1.0
+                });
+            info!(
+                "particles: box burst={} alive_after_0.75s={} inside_box={}",
+                burst.len(),
+                live.len(),
+                all_inside,
+            );
+            info!(
+                "particles: line={} sphere={} burst_repeatable={:?}",
+                particles::spawn_along_line("hello:spark", (0.0, 0.0, 0.0), (4.0, 0.0, 0.0), 3).len(),
+                particles::spawn_in_sphere("hello:spark", (0.0, 64.0, 0.0), 2.0, 4, 9).len(),
+                (
+                    particles::spawn_burst("hello:spark", (0.0, 64.0, 0.0), 2, 1.0, 11)
+                        .into_iter()
+                        .filter_map(particles::get)
+                        .map(|held| held.velocity)
+                        .collect::<Vec<_>>(),
+                    particles::spawn_burst("hello:spark", (0.0, 64.0, 0.0), 2, 1.0, 11)
+                        .into_iter()
+                        .filter_map(particles::get)
+                        .map(|held| held.velocity)
+                        .collect::<Vec<_>>(),
+                    particles::spawn_burst("hello:spark", (0.0, 64.0, 0.0), 2, 1.0, 12)
+                        .into_iter()
+                        .filter_map(particles::get)
+                        .map(|held| held.velocity)
+                        .collect::<Vec<_>>(),
+                ),
+            );
+            let held = particles::spawn_at("hello:spark", (0.0, 0.0, 0.0));
+            info!(
+                "particles: fade={:?} set_position={} set_velocity={} set_gravity={} set_collision={}",
+                held.and_then(particles::get)
+                    .map(|particle| (particle.alpha_at(0.0), particle.alpha_at(0.5), particle.alpha_at(1.0))),
+                held.map(|h| particles::set_position(h, (1.0, 2.0, 3.0))).unwrap_or(false),
+                held.map(|h| particles::set_velocity(h, (0.0, 0.0, 0.0))).unwrap_or(false),
+                held.map(|h| particles::set_gravity(h, 0.0)).unwrap_or(false),
+                held.map(|h| particles::set_collision(h, true)).unwrap_or(false),
+            );
+            info!(
+                "particles: color={} scale={} lifetime={} removes={} clear={}",
+                held.map(|h| particles::set_color(h, [1.0, 0.0, 0.0, 1.0])).unwrap_or(false),
+                held.map(|h| particles::set_scale(h, 2.0)).unwrap_or(false),
+                held.map(|h| particles::set_lifetime(h, 4.0)).unwrap_or(false),
+                held.map(particles::remove).unwrap_or(false),
+                particles::clear(),
+            );
+            let template = particles::register_emitter(
+                Emitter::new("hello:smoke", "hello:spark")
+                    .rate(2.5)
+                    .at((0.0, 64.0, 0.0))
+                    .direction((0.0, 1.0, 0.0))
+                    .spread(15.0)
+                    .speed(0.5)
+                    .shape(EmissionShape::Sphere { radius: 1.0 })
+                    .max_alive(50)
+                    .seed(7),
+            );
+            let emitter = particles::create_emitter("hello:smoke");
+            let first_second = particles::advance_emitters(1.0);
+            let second_second = particles::advance_emitters(1.0);
+            info!(
+                "particles: emitter={template} handle={:?} at_1s={first_second} at_2s={second_second} emitter_total={:?} emitters={}",
+                emitter,
+                emitter.and_then(particles::get_emitter).map(|held| held.spawned()),
+                particles::get_emitters().len(),
+            );
+            info!(
+                "particles: emitter_control rate={:?} shape={:?} pause={:?} resume={:?} stop={:?}",
+                emitter.map(|handle| particles::set_emission_rate(handle, 4.0)),
+                emitter.map(|handle| particles::set_emission_shape(
+                    handle,
+                    EmissionShape::Box { size: (2.0, 2.0, 2.0) }
+                )),
+                emitter.map(particles::pause_emitter),
+                emitter.map(particles::resume_emitter),
+                emitter.map(particles::stop_emitter),
+            );
+            info!(
+                "particles: unregister_emitter={} effects={} types={}",
+                particles::unregister_emitter("hello:smoke"),
+                particles::get_effects().len(),
+                particles::get_types().len(),
+            );
+            info!(
+                "particles: effect={} effects={} client-side: texture={} animation={} blend={} renderer={} list={} world={:?} refusals={:?}",
+                particles::register_effect(
+                    VisualEffect::new("hello:poof")
+                        .emitter("hello:smoke")
+                        .kind("hello:spark")
+                        .duration(3)
+                        .looping(true)
+                ),
+                particles::get_effects().len(),
+                particles::set_texture(0, "hello:spark"),
+                particles::set_animation(0, "hello:flicker"),
+                particles::set_blend_mode(0, BlendMode::Alpha),
+                particles::register_particle_renderer("hello:renderer"),
+                particles::client_particles().len(),
+                particles::spawn_into_world("hello:spark", (0.0, 64.0, 0.0)),
+                particles::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
+        // Section 42: a socket a mod really opens, and the client's connection it cannot see.
+        tasks::schedule_after_ticks(66, move || {
+            if !demo(42) {
+                return;
+            }
+            network::set_timeout(200);
+            let listener = network::listen("127.0.0.1:0");
+            info!(
+                "network: listen={:?} bound={:?} address={:?}",
+                listener,
+                listener.and_then(network::listener_address),
+                network::Address::new("127.0.0.1", 25565),
+            );
+            info!(
+                "network: closed_port={:?} udp={:?} connection={:?}",
+                network::connect("127.0.0.1:1"),
+                network::bind_udp("127.0.0.1:0"),
+                network::bind_udp("127.0.0.1:0")
+                    .and_then(network::connection)
+                    .map(|held| (held.transport, held.state, held.timeout)),
+            );
+            info!(
+                "network: channel={} {} channels={:?} message={} {} messages_ok={}",
+                network::register_channel("hello:chat"),
+                network::register_channel("hello:state"),
+                network::get_channels(),
+                network::register_message("hello:hello"),
+                network::register_message("hello:hello"),
+                network::get_channels().len() >= 2,
+            );
+            info!(
+                "network: handlers channel={} handler={} handlers={} traffic={:?}",
+                network::register_channel("hello:events"),
+                network::register_handler("hello:chat"),
+                network::get_handlers().len(),
+                network::get_traffic_stats(),
+            );
+            info!(
+                "network: settings compression={} encryption={} rate_limit={:?} retry={:?}",
+                {
+                    network::set_compression(true);
+                    network::set_rate_limit(65536);
+                    true
+                },
+                {
+                    network::set_encryption(false);
+                    true
+                },
+                network::set_timeout(500),
+                network::RetryPolicy::Fixed {
+                    attempts: 3,
+                    delay_millis: 250,
+                },
+            );
+            info!(
+                "network: close={:?} stopped={:?} unregister={} {}",
+                network::bind_udp("127.0.0.1:0").map(network::close),
+                listener.map(network::stop_listening),
+                network::unregister_channel("hello:state"),
+                network::unregister_message("hello:hello"),
+            );
+            info!(
+                "network: client-side: connected={} disconnected={} connection={:?} connections={} remote={:?} local={:?}",
+                network::is_connected(),
+                network::is_disconnected(),
+                network::get_connection().map(|held| held.label),
+                network::get_connections().len(),
+                network::get_remote_address(),
+                network::get_local_address(),
+            );
+            info!(
+                "network: client-side: latency={:?} ping={:?} jitter={:?} loss={:?} bandwidth={:?} state={:?}",
+                network::get_latency(),
+                network::get_ping(),
+                network::get_jitter(),
+                network::get_packet_loss(),
+                network::get_bandwidth(),
+                network::get_connection_state(),
+            );
+            info!(
+                "network: client-side: protocol={:?} session={:?} disconnect={} kick={} send={} refusals={:?}",
+                network::get_protocol_version(),
+                network::get_session_id(),
+                network::disconnect_client(),
+                network::kick_player("someone"),
+                network::send_to_client(&[1, 2, 3]),
+                network::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
+        // Section 43: a real packet codec, and the client's protocol it cannot touch.
+        tasks::schedule_after_ticks(68, move || {
+            if !demo(43) {
+                return;
+            }
+            let mut buffer = packets::Buffer::new();
+            buffer.write_u8(7);
+            buffer.write_u16(500);
+            buffer.write_u32(70_000);
+            buffer.write_varint(300);
+            buffer.write_string("hello");
+            buffer.write_f32(1.5);
+            buffer.write_bool(true);
+            buffer.write_bytes(&[1, 2, 3]);
+            let written = buffer.len();
+            info!(
+                "packets: wrote={} position={} remaining={}",
+                written,
+                buffer.position(),
+                buffer.remaining(),
+            );
+            let mut reader = packets::Buffer::from_slice(buffer.bytes());
+            info!(
+                "packets: read back u8={:?} u16={:?} u32={:?} varint={:?} string={:?} f32={:?} bool={:?} bytes={:?}",
+                reader.read_u8(),
+                reader.read_u16(),
+                reader.read_u32(),
+                reader.read_varint(),
+                reader.read_string(),
+                reader.read_f32(),
+                reader.read_bool(),
+                reader.read_bytes(3),
+            );
+            info!(
+                "packets: overrun={:?} position_now={}",
+                reader.read_u32(),
+                reader.position(),
+            );
+            let payload = [9u8, 8, 7];
+            let frame = packets::encode(&payload);
+            info!(
+                "packets: frame={:?} decoded={:?} truncated={:?}",
+                frame,
+                packets::decode(&frame),
+                packets::decode(&frame[..frame.len() - 1]),
+            );
+            info!(
+                "packets: varint edges={:?}",
+                [0u32, 127, 128, 255, 16_383, 16_384, u32::MAX]
+                    .iter()
+                    .map(|value| {
+                        let mut buffer = packets::Buffer::new();
+                        buffer.write_varint(*value);
+                        let bytes = buffer.into_bytes();
+                        let mut reader = packets::Buffer::from_slice(&bytes);
+                        (bytes.len(), reader.read_varint().ok())
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            let packet = packets::Packet::new(0x7f, "hello:ping")
+                .direction(packets::Direction::ToServer)
+                .state(packets::PacketState::Play)
+                .payload(&[1, 2, 3])
+                .metadata("owner", "hello_mod");
+            info!(
+                "packets: register={:?} duplicate={:?} id={:?} direction={:?} size={:?} codec={}",
+                packets::register(packet.clone()),
+                packets::register(packet.clone()),
+                packets::get_packet_id("hello:ping"),
+                packets::get_direction(0x7f),
+                packets::get_size(0x7f),
+                packets::register_codec(packets::Codec::new(0x7f, "hello:codec")),
+            );
+            let text = packets::serialize(&packet);
+            info!(
+                "packets: serialize={} inspect={:?} round_trip={:?} validate={:?}",
+                text.len(),
+                packets::inspect(&packet),
+                packets::deserialize(&text).map(|held| held.name),
+                packets::validate(&packet),
+            );
+            let handler = packets::register_handler(0x7f, Some(packets::Direction::ToServer), |_| true);
+            let mut dispatchee = packet.clone();
+            info!(
+                "packets: handler={handler} dispatched={} feed={:?} trace={} cleared={}",
+                packets::dispatch(&mut dispatchee),
+                packets::feed(0x7f, &packets::encode(&[4, 5, 6])),
+                {
+                    packets::set_trace_enabled(true);
+                    packets::get_trace().len()
+                },
+                packets::clear_trace(),
+            );
+            info!(
+                "packets: registry={} supports={} unregister_handler={} unregister={} trace_off={}",
+                packets::get_registry().len(),
+                packets::supports_packet(0x7f),
+                packets::unregister_handler(handler),
+                packets::unregister(0x7f),
+                packets::set_trace_enabled(false),
+            );
+            info!(
+                "packets: client-side: cancel={} replace={} modify={} send={} to_server={} to_client={} to_all={}",
+                packets::cancel(0x7f),
+                packets::replace(&packet),
+                packets::modify(&mut packet.clone()),
+                packets::send(&packet),
+                packets::send_to_server(&packet),
+                packets::send_to_client(&packet),
+                packets::send_to_all(&packet),
+            );
+            info!(
+                "packets: client-side: observer={} unknown={:?} protocol={:?} mapping={:?} claim={} events={} refusals={:?}",
+                packets::set_observer(|_| {}),
+                packets::get_unknown_packets().len(),
+                packets::get_protocol_version(),
+                packets::get_protocol_mapping("hello:ping"),
+                packets::register_protocol_mapping("hello:ping", 0x7f),
+                packets::PACKET_EVENTS.len(),
+                packets::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

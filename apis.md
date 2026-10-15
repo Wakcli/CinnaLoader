@@ -76,9 +76,9 @@ guide, not a contract.
 | 38 | Input handling | 58 | todo |
 | 39 | Camera APIs | 40 | done | A real camera: basis vectors, look_at, short-way rotation lerp, decaying shake, real row-major view/projection matrices, project/unproject, a six-plane frustum and `is_visible`; driving the client's camera refused |
 | 40 | Audio and sound | 43 | done | A real mixer model: sounds with a load/unload lifecycle, buses and sources, the multiplied source→bus→category→master volume chain, real attenuation and pan maths, real playbacks; hearing it on the client's device refused |
-| 41 | Particles and visual effects | 31 | todo |
-| 42 | Networking and connections | 43 | todo |
-| 43 | Packet interception and protocol APIs | 36 | todo |
+| 41 | Particles and visual effects | 32 | done | A real simulation a mod owns: particle types, a pool integrated over time, seeded bursts, `spawn_in_box` that keeps its particles in bounds, emitters with a rate accumulator, and visual-effect declarations; drawing refused |
+| 42 | Networking and connections | 43 | done | A mod's own socket is genuinely opened (`std::net`, bounded reads, length-prefixed framing, real statistics); the client's single game connection is refused with a reason per question |
+| 43 | Packet interception and protocol APIs | 36 | done | A real binary codec (every scalar, varint, strings, byte blocks, over-read refused), real framing, a bidirectional registry and a real dispatch path with a trace; the client's protocol refused |
 | 44 | Custom networking between mods | 26 | todo |
 | 45 | Commands and command registration | 30 | todo |
 | 46 | Chat and messages | 34 | todo |
@@ -853,6 +853,81 @@ Verified in a run with the mod attached: two sounds with a 1200 ms duration, loa
 bus with reverb and a filter, the multiplied volume chain, the master and category setters, the
 attenuation and pan figures above, a playback at 300 ms after `advance`, five live playbacks with
 `stop_all` stopping four, and every client call refused.
+
+### 41 — Particles and visual effects
+
+The client draws particles; what a mod owns here is the simulation, and it is real. A
+`ParticleType` declaration carries the sprite, size, colour, gravity, birth velocity, blend mode,
+max age and lifetime, and `spawn`/`spawn_at`/`spawn_in_box`/`spawn_along_line`/`spawn_in_sphere`/
+`spawn_burst` create real particles in a pool this host integrates: position += velocity·dt,
+velocity.y += gravity·dt, age += dt, removal at max age, with size and alpha interpolated over
+the lifetime. Bursts come from a seeded generator of the module's own, so the same seed
+reproduces the same velocities exactly and a different seed does not. Emitters are real too — a
+rate with a fractional accumulator, a direction with spread, a shape (point, sphere, box, disc),
+a max-alive cap and a seed, each with `pause`/`resume`/`stop` on a live handle — and 2.5 particles
+per second produced exactly 2 after one second and 5 after two. Visual effects are declarations
+over emitters and kinds.
+
+Refused with a sentence each: drawing, the client's own particle list, spawning into the client's
+world, binding a particle texture, and the client applying blend state. One deliberate deviation,
+documented in the module: `spawn_in_box` clamps a particle inside its box rather than removing it
+on exit, because the two requirements conflict and staying in bounds is the one the spec states.
+
+Verified in a run with the mod attached: a particle spawned at the origin moving exactly to
+`(0.25, 1.0, 0)` after 0.5 s with its velocity now `(0.5, −2.9, 0)`; removal by max age; five
+particles from a seeded box burst, all five alive and inside the box after 0.75 s; a line of 3
+and a sphere of 4; an alpha fade of `(1.0, 0.5, 0.0)` across the lifetime; the same seed giving
+identical burst velocities and a different seed different ones; and every client call refused.
+
+### 42 — Networking
+
+Two very different things live in this section and the module keeps them apart. **A mod's own
+socket is genuinely opened** with `std::net`: `listen` answers a listener whose bound address is
+real (the run shows `127.0.0.1:37245`, an ephemeral port), `bind_udp` and `connect` give real
+connections with a transport and a state, `receive` is bounded by a timeout and answers
+`NetError::Timeout` instead of blocking, framing is length-prefixed, and `send`/`send_reliable`/
+`send_unreliable`/`send_ordered`/`broadcast`/`flush`/`disconnect`/`close`/`reconnect` all work
+with real statistics counters over a moving window. Channels, messages, handlers and connection
+handlers are registries. The unit tests prove a 64-byte loopback round trip that moves exactly 64
+bytes and one message each way, that a read times out rather than hanging, that a closed port is
+refused, and that framing survives a message split across two reads.
+
+The **client's single game connection is not reachable**: whether it is connected, its remote and
+local address, its latency, ping, jitter, packet loss and bandwidth, its connection state, its
+protocol version, its session id, `disconnect_client`, `kick_player` and `send_to_client` all
+answer `false`/`None`/empty with their own reason. One documented partial: `set_compression` and
+`set_encryption` record a real per-connection flag carried in the frame header but do not
+transform the payload, because compressing would mean a codec dependency this crate does not take.
+
+Verified in a run with the mod attached: a listener bound to an ephemeral port and its real
+address, a connection to a closed port refused, a UDP connection reporting `(Udp, Connected,
+200ms)`, channels and messages registered with a duplicate refused, a handler registry, real
+traffic statistics, and every client question refused with its reason.
+
+### 43 — Packet interception and protocol APIs
+
+A packet is bytes, and bytes this host can do. The registry keys packet types both ways by
+numeric id and name — a duplicate id or name is refused, `Err(DuplicateId(127))` in the run — with
+a direction and a protocol state each, and codecs attached to a type. The `Buffer` is a real codec
+with a read cursor: u8, u16, u32, u64, i32, f32, f64, bool, a length-prefixed UTF-8 string, a
+7-bit varint, and raw and prefixed byte blocks, with an over-read a real error rather than a panic
+or a silent zero (`Err(OutOfBounds { wanted: 4, remaining: 0 })`). Framing is real: `encode`
+writes a varint length prefix and `decode` refuses a truncated frame rather than guessing
+(`Err(Truncated { declared: 3, available: 2 })`). Varint boundaries are exactly right — 0 and 127
+take one byte, 128 and 255 take two, 16383 takes two, 16384 takes three, `u32::MAX` takes five.
+There is a real handler chain per type and direction, a real dispatch and `feed` path, a trace with
+`export_recording`/`replay_recording`, and text `serialize`/`deserialize` with `validate` and
+`inspect`.
+
+Refused with a sentence each: cancelling, replacing or modifying the client's packets, sending
+into its transport, observing its flow, reading its unknown packets, its protocol version or its
+protocol mapping, and claiming one of its ids.
+
+Verified in a run with the mod attached: 23 bytes written and every field read back exactly
+(`u8=7, u16=500, u32=70000, varint=300, string="hello", f32=1.5, bool=true, bytes=[1,2,3]`), an
+over-read and a truncated frame both refused with their errors, the varint byte lengths above, a
+packet registered with its duplicate refused, `serialize`/`deserialize` round-tripping, a handler
+running on dispatch and on `feed`, the trace counting two entries, and every client call refused.
 
 ## Open: a wild jump on the first frame
 

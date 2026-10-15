@@ -75,13 +75,13 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §40 audio and sound (three sections landed together: §37, §39, §40).
-  Sections 1–40 are done and verified in a run with the mod attached; `apis.md` rows 1–40 say
-  `done` and `checklist.md` agrees. `cargo test` is green (329 lib + 12 loader + 4 example + 48
-  doctests) and `cargo clippy --all-targets` is clean.
-- **In progress:** starting §41 particles and visual effects.
-- **Next command:** `python3 tools/instructions.py check`, then work `## 41. Particles and visual
-  effects` from the wishlist, reusing the pattern the last twenty sections follow.
+- **Last finished:** §43 packet APIs (the batch was §41, §42, §43). Sections 1–43 are done and
+  verified in a run with the mod attached; `apis.md` rows 1–43 say `done` and `checklist.md`
+  agrees. `cargo test` is green (427 tests across the targets, 0 failed) and
+  `cargo clippy --all-targets` is clean.
+- **In progress:** starting §44 custom networking between mods, then §45 onwards.
+- **Next command:** `python3 tools/instructions.py check`, then work `## 44. Custom networking
+  between mods` from the wishlist, reusing the pattern the last twenty sections follow.
 - **How the last three sections were done, and why it worked:** three parallel lanes, one new
   module file each (`sdk/src/widget.rs`, `sdk/src/camera.rs`, `sdk/src/audio.rs`), with the
   manager owning the four files every section touches (`sdk/src/lib.rs` for the module line and
