@@ -976,6 +976,95 @@ impl Mod for Hello {
             info!("dimensions: unregister={}", dimensions::unregister("skylands"));
         });
 
+        // Section 16: the blocks a mod declares, and the world it cannot reach.
+        tasks::schedule_after_ticks(16, move || {
+            blocks::register_event_kinds();
+            info!(
+                "blocks: register={} events={} known={}",
+                blocks::register(
+                    BlockDescription::new("lantern", "Lantern")
+                        .material(BlockMaterial::Metal)
+                        .hardness(1.5)
+                        .resistance(2.0)
+                        .light_level(12)
+                        .transparent(true)
+                        .property(BlockProperty::facing(&["north", "south", "east", "west"]))
+                        .property(BlockProperty::waterlogged())
+                        .tool("pickaxe", "iron", true)
+                        .drops(&["lantern"])
+                        .block_entity(true)
+                        .behaviour(BlockBehaviour {
+                            on_break: Some(|| {}),
+                            on_use: Some(|| {}),
+                            ..BlockBehaviour::default()
+                        })
+                ),
+                blocks::event_kinds().len(),
+                blocks::has_event_kind("block_break"),
+            );
+            info!(
+                "blocks: type={:?} by_name={:?} id={:?} registry_id={:?} hardness={:?} resistance={:?} friction={:?} sound={:?}",
+                blocks::get_type("lantern").map(|block| block.to_string()),
+                blocks::get_by_name("Lantern").map(|block| block.name),
+                blocks::get_id("lantern"),
+                blocks::get_registry_id("lantern"),
+                blocks::get_hardness("lantern"),
+                blocks::get_resistance("lantern"),
+                blocks::get_friction("lantern"),
+                blocks::get_sound("lantern"),
+            );
+            info!(
+                "blocks: properties={:?} light={:?} solid={:?} transparent={:?} fluid={:?} air={:?} drops={:?} tool={:?}",
+                blocks::get_properties("lantern")
+                    .into_iter()
+                    .map(|property| (property.name, property.values.len(), property.default))
+                    .collect::<Vec<_>>(),
+                blocks::get_light_level("lantern"),
+                blocks::is_solid("lantern"),
+                blocks::is_transparent("lantern"),
+                blocks::is_fluid("lantern"),
+                blocks::is_air("lantern"),
+                blocks::get_drops("lantern"),
+                blocks::get_tool_requirement("lantern").map(|tool| (tool.tool, tool.tier, tool.required)),
+            );
+            info!(
+                "blocks: shapes={:?} {:?} fluid_state={:?} entity={:?} behaviour={:?} why={:?}",
+                blocks::get_collision_shape("lantern"),
+                blocks::get_render_shape("lantern"),
+                blocks::get_fluid_state("lantern"),
+                blocks::get_type("lantern").map(|block| block.block_entity),
+                blocks::behaviour::callbacks("lantern"),
+                blocks::behaviour::why_never_called(),
+            );
+            info!(
+                "blocks: world at={:?} state={:?} type={:?} light={:?} entity={:?} place={:?}",
+                blocks::get_at(0, 64, 0),
+                blocks::get_state(0, 64, 0),
+                blocks::get_type_at(0, 64, 0),
+                blocks::get_light_level_at(0, 64, 0),
+                blocks::get_block_entity_at(0, 64, 0),
+                blocks::can_place_at(0, 64, 0, "lantern"),
+            );
+            info!(
+                "blocks: set={} place={} break={} remove={} replace={} update={} neighbors={} tick={} cancel={}",
+                blocks::set(0, 64, 0, "lantern"),
+                blocks::place(0, 64, 0, "lantern"),
+                blocks::break_block(0, 64, 0),
+                blocks::remove(0, 64, 0),
+                blocks::replace(0, 64, 0, "lantern", "air"),
+                blocks::update(0, 64, 0),
+                blocks::notify_neighbors(0, 64, 0),
+                blocks::schedule_tick(0, 64, 0, 20),
+                blocks::cancel_scheduled_tick(0, 64, 0),
+            );
+            info!(
+                "blocks: refusals={:?} registered_with_client={} unregister={}",
+                blocks::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                blocks::is_registered_with_the_client("lantern"),
+                blocks::unregister("lantern"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

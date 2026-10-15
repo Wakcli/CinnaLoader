@@ -51,7 +51,7 @@ guide, not a contract.
 | 13 | Localization | 21 | done | Keys per language with a fallback, `one\|many` plurals, placeholders, and the handful of formats a player sees |
 | 14 | Game and session state | 33 | done | What the host observes itself: frames, ticks, rates, version, launch address, window, phase, its own two managers, and four recorded requests |
 | 15 | World and dimension APIs | 56 | done | Every name exists and answers honestly: the world half is `None`/`false` with a reason (hooks this host does not have), the dimension half is a real registry mods declare into |
-| 16 | Block APIs | 50 | todo |
+| 16 | Block APIs | 50 | done | Block types mods declare (properties, hardness, shapes, tool, drops, behaviour) plus every world question refused with a reason |
 | 17 | Item APIs | 47 | todo |
 | 18 | Inventory and containers | 50 | todo |
 | 19 | Entity system | 82 | todo |
@@ -254,6 +254,36 @@ Verified in a live client: every `world::` question `None` or `false` with its w
 log, the refusal table naming thirteen kinds of world state, and a declared `skylands`
 dimension read back with its bounds, gravity, clock, biome source, ambient properties and
 respawn rules, then unregistered.
+
+### 16 — Block APIs
+
+The same split as section 15. A **block type** is data a mod ships, and declaring one is real:
+id, name, material (which picks the sound), hardness, resistance, friction, light emission,
+solid/replaceable/transparent/fluid/air/flammable/gravity, properties with their values and
+defaults, collision/outline/render/selection shapes, tool requirement, drops, fluid state,
+whether it can hold a block entity, and its behaviour callbacks. Every mod can read that
+registry back, by id or by name, and `register_property` and `register_block_entity` amend a
+declaration in place.
+
+The behaviour callbacks — `on_neighbor_update`, `on_random_tick`, `on_scheduled_tick`,
+`on_use`, `on_attack`, `on_break`, `on_placed` — are recorded on the declaration and this
+host **never calls them**, because nothing here sees a block event from the client. The
+module says so where it matters, `blocks::behaviour::why_never_called()` is the sentence, and
+`blocks::register_event_kinds()` teaches the §6 event bus all eighteen block event names so a
+mod's subscription is in place for when the hooks land.
+
+Everything about blocks *in the world* answers `None` or `false` with the reason:
+`get_at`, `get_state`, `set`, `set_state`, `set_property`, `place`, `break_block`, `remove`,
+`replace`, `update`, `notify_neighbors`, `schedule_tick`, `cancel_scheduled_tick`,
+`get_light_block`, `get_block_entity`, `create_block_entity`, `can_place_at`, `can_survive`,
+and the six questions whose name a declared-type accessor already holds are exported as
+`get_type_at`, `get_id_at`, `get_property_at`, `get_light_level_at`, `get_fluid_state_at`,
+`get_block_entity_at`, with the module path having the wishlist's own spelling too.
+
+Verified in a live client: a lantern declared with two properties, read back with its
+material, hardness, light level, drops and tool requirement, its behaviour reporting
+`["on_use", "on_break"]` while `why_never_called()` explains that nothing here calls them,
+eighteen event kinds registered, and every world question `None` or `false`.
 
 ## Open: a wild jump on the first frame
 

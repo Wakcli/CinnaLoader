@@ -44,6 +44,7 @@ use std::{
     sync::OnceLock,
 };
 
+pub mod blocks;
 pub mod capability;
 pub mod compat;
 pub mod config;
@@ -1237,6 +1238,10 @@ pub mod prelude {
     };
     pub use crate::capability::{self as capabilities, Capability};
     pub use crate::compat;
+    pub use crate::blocks::{
+        self as blocks, BlockBehaviour, BlockDescription, BlockMaterial, BlockProperty,
+        BlockShapes, ToolRequirement,
+    };
     pub use crate::config::{
         self as config, ConfigCategory, ConfigComment, ConfigConstraint, ConfigEntry, ConfigGroup,
         ConfigMigration, ConfigRestartRequirement, ConfigSchema, ConfigType, ConfigValidator,
