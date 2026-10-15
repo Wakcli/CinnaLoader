@@ -72,10 +72,10 @@ guide, not a contract.
 | 34 | Models and animations | 50 | todo |
 | 35 | HUD and overlays | 32 | done | Elements with alignment, anchor, scale, opacity, layers, z index and priority, with real placement maths against the screen size; a flush draws the text on the overlay and counts the rest |
 | 36 | GUI and screen system | 45 | done | Screens with a real stack, widgets with focus/hover and three real layouts (vertical, horizontal, grid), theme/style/scale/clip, input capture, cursor and tooltips; the client's screen layer refused |
-| 37 | GUI widget library | 47 | todo |
+| 37 | GUI widget library | 47 | done | A real node tree (two-way links, cycles refused, margin/border/padding geometry, min/max clamping, four layouts with weight), the 66-kind `WidgetType` catalogue, a keyed data store with read-through bindings and twelve events with a dispatch path |
 | 38 | Input handling | 58 | todo |
-| 39 | Camera APIs | 39 | todo |
-| 40 | Audio and sound | 43 | todo |
+| 39 | Camera APIs | 40 | done | A real camera: basis vectors, look_at, short-way rotation lerp, decaying shake, real row-major view/projection matrices, project/unproject, a six-plane frustum and `is_visible`; driving the client's camera refused |
+| 40 | Audio and sound | 43 | done | A real mixer model: sounds with a load/unload lifecycle, buses and sources, the multiplied source→bus→category→master volume chain, real attenuation and pan maths, real playbacks; hearing it on the client's device refused |
 | 41 | Particles and visual effects | 31 | todo |
 | 42 | Networking and connections | 43 | todo |
 | 43 | Packet interception and protocol APIs | 36 | todo |
@@ -786,6 +786,73 @@ Verified in a run of the loader with the mod attached: the press/release edges a
 clearing, two mouse buttons with the pointer at `(110, 45)` and a delta of `(10, -5)`, two
 modifiers, two keybinds with `hello:dash -> LeftShift`, `Space` making `hello:jump` active and
 a rebind to `J` making it inactive again, and every client device call refused.
+
+### 37 — GUI widget library
+
+Below the 47 functions there is a real node tree, not a bag of setters. `add_child` sets both
+sides of the link and detaches the node from a previous parent; a self-link or an ancestor link
+is refused, so the tree cannot cycle; `remove_child`, `remove_all_children` and `unregister`
+clear the parent on the way out. The geometry is real arithmetic: margin, border and padding
+produce distinct `margin_rect`/`border_rect`/content rectangles, `get_rect` sums every
+ancestor's content offset, `set_min_size`/`set_max_size` and `Constraints` clamp `set_size` (an
+inverted pair clamps rather than panics), and `place` lays a parent's children out for absolute,
+vertical, horizontal and grid layouts with padding, spacing and weight. `WidgetType::ALL` carries
+all 66 kinds, each knowing whether it accepts text, children and a value, and `ui_kind` bridges a
+kind into section 36's screen system. `set_data`/`get_data` is a real keyed store and
+`bind`/`unbind` really read through to a source node, with the node's own key winning over the
+bound one. Twelve events (`WidgetEvent::ALL`) each register a named handler, `dispatch` runs and
+records them, and `set_value` raises `Change` only when the value actually moves. What the client
+owns is refused with its own sentence: drawing, real input delivery, the client's theme, native
+dialogs and file pickers, IME, and client-side scrolling.
+
+Verified in a run with the mod attached: 66 kinds; a three-child panel with the cycle refused; a
+margin/border/padding rect of `(13, 13, 4, 4)`; a button clamped up from 10×5 to its 60×20
+minimum and a slider clamped down to its 200×30 maximum; a vertical layout placing three children
+at y = 15, 17 and 39 with the weighted child taking the remaining 86 pixels; a binding reading
+`From the panel` through to its source and then the node's own `Own label` winning; three
+dispatches from `set_value`, `submit` and `dispatch`; and every client call refused.
+
+### 39 — Camera APIs
+
+This is a real camera. Position, yaw/pitch/roll, the forward/up/right basis, fov with clamping,
+near and far planes, `look_at`, `lerp_position`, `lerp_rotation` (which takes the short way
+round: 350° to 10° at half is 0°), shake with a decaying offset, zoom, third-person distance,
+bobbing, roll, free camera and `reset` are all values a mod owns. `get_view_matrix` and
+`get_projection_matrix` build real 4×4 matrices — row-major, applied to column vectors, which the
+module states — `world_to_screen` projects through view×projection and refuses a point behind the
+camera, `screen_to_world` unprojects, `get_frustum` extracts the six planes from view×projection,
+and `is_visible`/`is_box_visible` test them. `register_modifier` and `register_camera_controller`
+are declaration registries, as in section 29. Driving the *client's* camera — reading or setting
+its position, rotation, mode, entity, fov or shake, and calling a modifier or a controller — is
+refused with its own sentence. The convention matches the game's: yaw 0 faces +Z and yaw 90
+faces −X.
+
+Verified in a run with the mod attached: a basis at yaw 90 / pitch −10 of `(−0.985, 0.174, 0)`;
+fov clamped from 500 to 179; a point 8 units ahead projecting to the screen centre at depth
+`0.988` while the point behind projects to `None`; all six frustum plane distances to that point
+positive, with `contains_point` true and `is_visible` false for the point behind; shake decaying
+0.6 → 0.121 after 400 ms; the short-way yaw lerp; and every client-camera call refused. The
+section's tests were mutation-checked — breaking the rotation wrap takes
+`lerp_takes_the_short_way_round_on_yaw` red, and the file was restored byte-identical.
+
+### 40 — Audio and sound
+
+Nothing here can be heard, because the client owns the audio device, so this section is the model
+a mod can actually compute with. Sounds register, load and unload with a real duration; buses and
+sources are handles with real state; the volume chain resolves source → bus → category → master
+as a product (0.5 × 0.8 = 0.4 in the run) with every setter clamped; playbacks are real, moving
+through playing → paused → resumed → stopped with a position that advances; and the spatial maths
+is genuine — `attenuation_at` on a 1–16 linear curve gives exactly 0.8 at 4 units, and
+`pan_towards` puts a source at +X hard right (`1.0`) against a listener facing −Z. Reverb,
+filter, attenuation, spatialization, looping, pitch, pan and the listener are the mod's own, and
+`get_diagnostics` summarises its mixer. Refused with a sentence each: hearing anything (the
+client's device), the client's master volume and sound list, the client's own reverb and filter
+processing, and decoding an audio file — this host has no decoder, as with section 33's textures.
+
+Verified in a run with the mod attached: two sounds with a 1200 ms duration, load and unload, a
+bus with reverb and a filter, the multiplied volume chain, the master and category setters, the
+attenuation and pan figures above, a playback at 300 ms after `advance`, five live playbacks with
+`stop_all` stopping four, and every client call refused.
 
 ## Open: a wild jump on the first frame
 

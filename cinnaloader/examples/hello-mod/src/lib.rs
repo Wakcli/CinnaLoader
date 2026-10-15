@@ -3144,6 +3144,443 @@ impl Mod for Hello {
             );
         });
 
+        // Section 37: the widget library — a real node tree, real geometry, real events.
+        tasks::schedule_after_ticks(58, move || {
+            if !demo(37) {
+                return;
+            }
+            widget::register(
+                WidgetNode::new("hello:panel", WidgetType::Panel, "")
+                    .at(10.0, 10.0)
+                    .sized(240.0, 120.0)
+                    .with_padding(Edges::all(4.0))
+                    .with_border(Edges::all(1.0)),
+            );
+            widget::register(WidgetNode::new("hello:title", WidgetType::TextLabel, "Settings"));
+            widget::register(WidgetNode::new("hello:button", WidgetType::Button, "Apply"));
+            widget::register(WidgetNode::new("hello:slider", WidgetType::Slider, ""));
+            info!(
+                "widget: kinds={} panel={:?} title={:?} button={:?}",
+                WidgetType::ALL.len(),
+                widget::get_node("hello:panel").map(|node| node.to_widget().to_string()),
+                widget::get_node("hello:title").map(|node| node.to_widget().to_string()),
+                widget::get_node("hello:button").map(|node| node.to_widget().to_string()),
+            );
+            info!(
+                "widget: kind: text={} children={} value={} ui={:?} id={:?} parent={:?}",
+                WidgetType::Button.accepts_text(),
+                WidgetType::Panel.accepts_children(),
+                WidgetType::Slider.takes_value(),
+                WidgetType::Button.ui_kind().as_str(),
+                widget::get_id("hello:panel"),
+                widget::get_parent("hello:title"),
+            );
+            info!(
+                "widget: add_child={} {} {} cycle={} children={:?}",
+                widget::add_child("hello:panel", "hello:title"),
+                widget::add_child("hello:panel", "hello:button"),
+                widget::add_child("hello:panel", "hello:slider"),
+                widget::add_child("hello:title", "hello:panel"),
+                widget::get_children("hello:panel"),
+            );
+            info!(
+                "widget: parent_now={:?} margin={} border={} padding={} rect={:?}",
+                widget::get_parent("hello:slider"),
+                widget::set_margin("hello:title", Edges::sides(2.0, 2.0, 2.0, 2.0)),
+                widget::set_border("hello:title", Edges::all(1.0)),
+                widget::set_padding("hello:title", Edges::all(3.0)),
+                widget::get_rect("hello:title"),
+            );
+            info!(
+                "widget: clamp min={} max={} size={} rect={:?} constraints={} rect2={:?}",
+                widget::set_min_size("hello:button", 60.0, 20.0),
+                widget::set_max_size("hello:button", 120.0, 40.0),
+                widget::set_size("hello:button", 10.0, 5.0),
+                widget::get_rect("hello:button"),
+                widget::set_constraints(
+                    "hello:slider",
+                    Constraints::new((10.0, 4.0), (200.0, 30.0)).with_weight(1.0)
+                ),
+                {
+                    widget::set_size("hello:slider", 500.0, 500.0);
+                    widget::get_rect("hello:slider")
+                },
+            );
+            info!(
+                "widget: layout={} spacing={} placed={:?}",
+                widget::set_layout("hello:panel", Layout::Vertical),
+                widget::set_spacing("hello:panel", 2.0),
+                widget::place("hello:panel"),
+            );
+            info!(
+                "widget: text={:?} set_text={} icon={} tooltip={} visible={} enabled={} disabled={}",
+                widget::get_text("hello:title"),
+                widget::set_text("hello:title", "General"),
+                widget::set_icon("hello:button", "hello:apply"),
+                widget::set_tooltip("hello:button", "write the settings"),
+                widget::set_visible("hello:title", true),
+                widget::set_enabled("hello:button", true),
+                widget::set_disabled("hello:slider", false),
+            );
+            info!(
+                "widget: background={} opacity={} rotation={} scale={} cursor={} focusable={} draggable={} resizable={} clippable={}",
+                widget::set_background("hello:panel", "hello:panel_bg"),
+                widget::set_opacity("hello:panel", 0.9),
+                widget::set_rotation("hello:title", 0.0),
+                widget::set_scale("hello:title", 1.25),
+                widget::set_cursor("hello:button", "hello:hand"),
+                widget::set_focusable("hello:button", true),
+                widget::set_draggable("hello:panel", true),
+                widget::set_resizable("hello:panel", true),
+                widget::set_clippable("hello:panel", true),
+            );
+            widget::set_data("hello:panel", "label", "From the panel");
+            info!(
+                "widget: data={:?} bind={} read_through={:?} own_wins={:?} unbind={} after={:?}",
+                widget::get_data("hello:title", "label"),
+                widget::bind("hello:title", "label", "hello:panel"),
+                widget::get_data("hello:title", "label"),
+                {
+                    widget::set_data("hello:title", "label", "Own label");
+                    widget::get_data("hello:title", "label")
+                },
+                widget::unbind("hello:title", "label"),
+                widget::get_data("hello:title", "label"),
+            );
+            info!(
+                "widget: handlers={} {} {} {} {} {} {} {} {} {} {}",
+                widget::on_click("hello:button", "hello:on_apply"),
+                widget::on_double_click("hello:title", "hello:on_rename"),
+                widget::on_right_click("hello:button", "hello:on_menu"),
+                widget::on_hover("hello:button", "hello:on_hover"),
+                widget::on_focus("hello:slider", "hello:on_focus"),
+                widget::on_blur("hello:slider", "hello:on_blur"),
+                widget::on_change("hello:slider", "hello:on_change"),
+                widget::on_submit("hello:slider", "hello:on_submit"),
+                widget::on_drag_start("hello:panel", "hello:on_grab"),
+                widget::on_drag("hello:panel", "hello:on_drag"),
+                widget::on_drag_end("hello:panel", "hello:on_drop"),
+            );
+            info!(
+                "widget: scroll={} value={} submit={} dispatched={} taken={:?}",
+                widget::on_scroll("hello:panel", "hello:on_scroll"),
+                widget::set_value("hello:slider", "0.5"),
+                widget::submit("hello:slider"),
+                widget::dispatch("hello:slider", WidgetEvent::Change, "0.75"),
+                {
+                    let taken = widget::take_dispatches().len();
+                    widget::clear_dispatches();
+                    taken
+                },
+            );
+            info!(
+                "widget: events={} node={:?} value_now={:?} removed={} all={}",
+                WidgetEvent::ALL.len(),
+                widget::get_node("hello:slider").map(|node| node.to_widget().to_string()),
+                widget::get_value("hello:slider"),
+                widget::remove_child("hello:panel", "hello:slider"),
+                {
+                    widget::remove_all_children("hello:panel");
+                    widget::get_children("hello:panel").len()
+                },
+            );
+            info!(
+                "widget: client-side: draw={} input={} theme={} dialog={} ime={} scroll={} refusals={:?}",
+                widget::draw("hello:panel"),
+                widget::deliver_input("hello:button", WidgetEvent::Click),
+                widget::apply_client_theme("minecraft:dark"),
+                widget::open_native_dialog("hello:panel"),
+                widget::start_ime("hello:title"),
+                widget::scroll_by("hello:panel", 0.0, 4.0),
+                widget::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
+        // Section 39: a camera a mod owns, with real matrices and a real frustum.
+        tasks::schedule_after_ticks(60, move || {
+            if !demo(39) {
+                return;
+            }
+            camera::reset();
+            camera::set_viewport(1280, 720);
+            camera::set_position(8.0, 65.0, 8.0);
+            camera::set_rotation(90.0, -10.0, 0.0);
+            info!(
+                "camera: position={:?} rotation={:?} direction={:?} up={:?} right={:?}",
+                camera::get_position(),
+                camera::get_rotation(),
+                camera::get_direction(),
+                camera::get_up_vector(),
+                camera::get_right_vector(),
+            );
+            info!(
+                "camera: fov={} clamped={} near={} far={} mode={:?} aspect={}",
+                camera::get_fov(),
+                {
+                    camera::set_fov(500.0);
+                    camera::get_fov()
+                },
+                camera::get_near_plane(),
+                camera::get_far_plane(),
+                camera::get_camera_mode(),
+                camera::get().aspect(),
+            );
+            camera::set_fov(70.0);
+            camera::set_target("hello:marker");
+            camera::set_entity("hello:player");
+            info!(
+                "camera: look_at={:?} target={:?} entity={:?} third_person={} set={:?}",
+                camera::look_at((8.0, 65.0, 0.0)),
+                camera::get_target(),
+                camera::get_entity(),
+                camera::get_third_person_distance(),
+                camera::set_third_person_distance(4.0),
+            );
+            camera::reset();
+            camera::set_viewport(1280, 720);
+            let forward = camera::get_direction();
+            let ahead = (forward.0 * 8.0, forward.1 * 8.0, forward.2 * 8.0);
+            let behind = (-ahead.0, -ahead.1, -ahead.2);
+            info!(
+                "camera: ahead={:?} project={:?} project_behind={:?} unproject={:?}",
+                ahead,
+                camera::world_to_screen(ahead),
+                camera::world_to_screen(behind),
+                camera::screen_to_world(640.0, 360.0, 0.5),
+            );
+            info!(
+                "camera: visible={} visible_behind={} box={} contains={} planes={:?}",
+                camera::is_visible(ahead),
+                camera::is_visible(behind),
+                camera::is_box_visible(
+                    (ahead.0 - 1.0, ahead.1 - 1.0, ahead.2 - 1.0),
+                    (ahead.0 + 1.0, ahead.1 + 1.0, ahead.2 + 1.0)
+                ),
+                camera::get_frustum().contains_point(ahead),
+                {
+                    let frustum = camera::get_frustum();
+                    (0..6)
+                        .filter_map(|index| frustum.plane(index).map(|plane| plane.distance_to(ahead)))
+                        .collect::<Vec<_>>()
+                },
+            );
+            camera::shake(0.6);
+            info!(
+                "camera: shake={} offset={:?} decayed={} offset_after={:?}",
+                camera::get_shake(),
+                camera::shake_offset(),
+                {
+                    camera::advance(400);
+                    camera::get_shake()
+                },
+                camera::shake_offset(),
+            );
+            info!(
+                "camera: lerp_position={:?} lerp_rotation={:?} wrap={}",
+                camera::lerp_position((0.0, 0.0, 0.0), (10.0, 0.0, 0.0), 0.25),
+                camera::lerp_rotation((350.0, 0.0, 0.0), (10.0, 0.0, 0.0), 0.5),
+                camera::wrap_degrees(370.0),
+            );
+            info!(
+                "camera: mode={:?} set_bobbing={} roll={} free={} zoom={} modifiers={:?} controller={:?}",
+                {
+                    camera::set_camera_mode(CameraMode::ThirdPerson);
+                    camera::get_camera_mode()
+                },
+                {
+                    camera::set_bobbing(true);
+                    camera::get()
+                        .direction()
+                        .2
+                },
+                {
+                    camera::set_roll(5.0);
+                    camera::get_rotation().2
+                },
+                {
+                    camera::set_free_camera(true);
+                    camera::get().is_free()
+                },
+                {
+                    camera::set_zoom(2.0);
+                    camera::get_zoom()
+                },
+                {
+                    camera::register_modifier("hello:no_shake");
+                    camera::get_modifiers()
+                },
+                {
+                    camera::register_camera_controller("hello:orbit");
+                    camera::get_camera_controllers()
+                },
+            );
+            info!(
+                "camera: client-side: position={:?} rotation={:?} mode={:?} entity={:?} fov={:?} shake={:?}",
+                camera::client_position(),
+                camera::client_rotation(),
+                camera::client_mode(),
+                camera::client_entity(),
+                camera::client_fov(),
+                camera::client_shake(),
+            );
+            info!(
+                "camera: client-side: set_position={} set_rotation={} set_mode={} set_fov={} shake={} modifier={} controller={} refusals={:?}",
+                camera::set_client_position(0.0, 0.0, 0.0),
+                camera::set_client_rotation(0.0, 0.0, 0.0),
+                camera::set_client_mode(CameraMode::FirstPerson),
+                camera::set_client_fov(90.0),
+                camera::shake_client(0.5),
+                camera::call_modifier("hello:no_shake"),
+                camera::call_controller("hello:orbit"),
+                camera::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "camera: unregister: modifier={} controller={} reset={:?}",
+                camera::unregister_modifier("hello:no_shake"),
+                camera::get_camera_controllers().len(),
+                {
+                    camera::reset();
+                    camera::get_position()
+                },
+            );
+        });
+
+        // Section 40: a mixer model a mod owns, and the device it cannot play on.
+        tasks::schedule_after_ticks(62, move || {
+            if !demo(40) {
+                return;
+            }
+            info!(
+                "audio: register={} {} sources={} duration={:?} loaded={} unloaded={}",
+                audio::register_sound(
+                    Sound::new("hello:ping", "sounds/ping.ogg")
+                        .duration(1200)
+                        .category(SoundCategory::Player)
+                        .volume(0.8)
+                        .pitch(1.0)
+                        .looping(false)
+                ),
+                audio::register_sound(
+                    Sound::new("hello:music", "sounds/music.ogg")
+                        .duration(60000)
+                        .category(SoundCategory::Music)
+                ),
+                audio::get_sounds().len(),
+                audio::get_duration("hello:ping"),
+                audio::load_sound("hello:ping"),
+                audio::unload_sound("hello:music"),
+            );
+            let bus = audio::create_bus(
+                Bus::new("hello:sfx")
+                    .volume(0.8)
+                    .category(SoundCategory::Player)
+                    .reverb(0.2)
+                    .filter("lowpass"),
+            );
+            let source = audio::create_source(
+                Source::new("hello:ping")
+                    .bus(bus)
+                    .volume(0.5)
+                    .pitch(1.0)
+                    .position([4.0, 64.0, 0.0])
+                    .distance(1.0, 16.0)
+                    .attenuation(Attenuation::Linear)
+                    .spatialization(true)
+                    .looping(false),
+            );
+            info!(
+                "audio: bus={} source={} own={:?} resolved={:?} buses={} sources={}",
+                audio::get_bus(bus).is_some(),
+                audio::get_source(source).is_some(),
+                audio::get_volume(source),
+                audio::resolve_volume(source),
+                audio::get_buses().len(),
+                audio::get_sources().len(),
+            );
+            info!(
+                "audio: master={} set_master={} category={} set_category={} categories={}",
+                audio::get_master_volume(),
+                audio::set_master_volume(0.5),
+                audio::get_category_volume(SoundCategory::Player),
+                audio::set_category_volume(SoundCategory::Player, 0.5),
+                SoundCategory::all().len(),
+            );
+            audio::set_listener(Listener::new(
+                [0.0, 64.0, 0.0],
+                [0.0, 0.0, -1.0],
+                [0.0, 1.0, 0.0],
+            ));
+            info!(
+                "audio: listener={:?} right={:?} distance={} attenuation_at={:?} pan_towards={:?} stored_pan={:?}",
+                audio::get_listener(),
+                audio::get_listener().right(),
+                audio::get_listener().distance_to([4.0, 64.0, 0.0]),
+                audio::get_source(source).map(|held| held.attenuation_at(4.0)),
+                audio::get_source(source).map(|held| held.pan_towards(&audio::get_listener())),
+                audio::get_pan(source),
+            );
+            let playing = audio::play_3d("hello:ping", [4.0, 64.0, 0.0]);
+            info!(
+                "audio: playing={} state={:?} position={:?}",
+                playing.is_some(),
+                playing.and_then(audio::get_playback_state),
+                playing.and_then(audio::get_playback_position),
+            );
+            audio::advance(300);
+            info!(
+                "audio: after_advance={:?} paused={} state={:?} resumed={} stopped={}",
+                playing.and_then(audio::get_playback_position),
+                playing.map(audio::pause).unwrap_or(false),
+                playing.and_then(audio::get_playback_state),
+                playing.map(audio::resume).unwrap_or(false),
+                playing.map(audio::stop).unwrap_or(false),
+            );
+            info!(
+                "audio: play={} play_2d={} play_at={} play_source={} live={} stop_all={}",
+                audio::play("hello:ping").is_some(),
+                audio::play_2d("hello:ping").is_some(),
+                audio::play_at("hello:ping", [0.0, 64.0, 0.0]).is_some(),
+                audio::play_source(source).is_some(),
+                audio::get_playbacks().len(),
+                audio::stop_all(),
+            );
+            info!(
+                "audio: pitch={:?} set={:?} attenuation={:?} spatial={:?} looping={:?} position={:?}",
+                audio::get_pitch(source),
+                audio::set_pitch(source, 1.5),
+                audio::get_attenuation(source),
+                audio::get_spatialization(source),
+                audio::get_looping(source),
+                audio::set_position(source, [2.0, 64.0, 0.0]),
+            );
+            info!(
+                "audio: reverb={:?} set={} filter={:?} set={} distance={:?} set={:?}",
+                audio::get_reverb(bus),
+                audio::set_reverb(bus, 0.5),
+                audio::get_filter(bus),
+                audio::set_filter(bus, "highpass"),
+                audio::get_distance(source),
+                audio::set_distance(source, 0.5, 24.0),
+            );
+            info!(
+                "audio: client-side: effect={} chain={} devices={:?} set_device={} client_master={:?} set={} client_sounds={:?} decode={}",
+                audio::register_effect("hello:echo", "echo"),
+                audio::set_effect_chain(bus, &["hello:echo"]),
+                audio::get_audio_devices(),
+                audio::set_output_device("default"),
+                audio::get_client_master_volume(),
+                audio::set_client_master_volume(1.0),
+                audio::get_client_sounds(),
+                audio::load_sound_from_file("hello:from_file", "sounds/ping.ogg"),
+            );
+            info!(
+                "audio: refusals={:?} diagnostics={:?} unregister={}",
+                audio::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                audio::get_diagnostics(),
+                audio::unregister_sound("hello:music"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

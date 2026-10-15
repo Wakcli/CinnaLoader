@@ -75,15 +75,25 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §38 input handling (commit `de0fd8a`). Sections 1–38 are done and
-  verified in a run with the mod attached; `apis.md` rows 1–38 say `done` and `checklist.md`
-  agrees. `cargo test` is green (302 tests) and `cargo clippy --all-targets` is clean.
-- **In progress:** starting §37 GUI widget library (the widget *tree*: children, min/max
-  size, margin, padding, border, background, rotation, constraints, data, bindings and the
-  handler registrations), then §39 camera, §40 … in order.
-- **Next command:** `python3 tools/instructions.py check`, then work `## 37. GUI widget
-  library` from the wishlist (its two lists: the ~68 widget kinds and the ~47 functions),
-  reusing the pattern the last twenty sections follow.
+- **Last finished:** §40 audio and sound (three sections landed together: §37, §39, §40).
+  Sections 1–40 are done and verified in a run with the mod attached; `apis.md` rows 1–40 say
+  `done` and `checklist.md` agrees. `cargo test` is green (329 lib + 12 loader + 4 example + 48
+  doctests) and `cargo clippy --all-targets` is clean.
+- **In progress:** starting §41 particles and visual effects.
+- **Next command:** `python3 tools/instructions.py check`, then work `## 41. Particles and visual
+  effects` from the wishlist, reusing the pattern the last twenty sections follow.
+- **How the last three sections were done, and why it worked:** three parallel lanes, one new
+  module file each (`sdk/src/widget.rs`, `sdk/src/camera.rs`, `sdk/src/audio.rs`), with the
+  manager owning the four files every section touches (`sdk/src/lib.rs` for the module line and
+  the prelude exports, `examples/hello-mod/src/lib.rs` for the demo, `checklist.md`, `apis.md`).
+  Stubs and `pub mod` lines go in first so the crate builds at every instant. **Never commit
+  while a lane is running** — `git add -A` would catch its half-written file. Lanes report type
+  names; the manager wires, demos, verifies and commits.
+- **A flake this batch found and fixed:** the tests `the_phases_reach_the_mod_in_order` and
+  `a_panicking_mod_is_reported_and_isolated` in `sdk/src/lib.rs` both call `frame_body`, which
+  mutates the process-wide lifecycle phase, and neither took `crate::test_lock::serial()` — so
+  the panic-isolation test failed about one run in four. Both now take the lock and five
+  consecutive full runs are green. **Any test that calls `frame_body` must take the serial lock.**
 - **How to verify fast now, because this is the expensive part:**
   1. `cargo build -p hello-mod` (**not** `cargo test` — that does not rebuild the cdylib, and a
      stale `.so` has already fooled one verification run).

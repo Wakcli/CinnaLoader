@@ -1322,9 +1322,17 @@ pub mod prelude {
     pub use crate::player::{
         self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics,
     };
+    pub use crate::audio::{
+        self as audio, Attenuation, Bus, BusHandle, Listener, PlaybackHandle, PlaybackState,
+        Sound, SoundCategory, SoundPlayback, Source, SourceHandle,
+    };
+    pub use crate::camera::{
+        self as camera, Camera, CameraMode, Frustum, Mat4, Plane, DEFAULT_FAR, DEFAULT_FOV,
+        DEFAULT_NEAR, MAX_FOV, MIN_FOV,
+    };
     pub use crate::models::{
         self as models, Animation, AnimationController, Bone, BoneTransform, Keyframe, LoopMode,
-        Model, ModelPart, Playback,
+        Model, ModelPart, Playback, Vec3,
     };
     pub use crate::movement::{
         self as movement, Input, MovementMode, MovementProfile, MovementStep,
@@ -1358,6 +1366,10 @@ pub mod prelude {
     };
     pub use crate::ui::{
         self as ui, Layout, Screen, UiState, Widget, WidgetKind,
+    };
+    pub use crate::widget::{
+        self as widget, Constraints, Dispatch, Edges, Rect as WidgetRect, WidgetEvent,
+        WidgetNode, WidgetType,
     };
     pub use crate::world::{
         self as world, dimensions, AmbientProperties, DimensionDescription, DimensionKind,
@@ -1599,6 +1611,7 @@ mod tests {
 
     #[test]
     fn the_phases_reach_the_mod_in_order() {
+        let _serial = crate::test_lock::serial();
         let mut module = Recorder::default();
         assert_eq!(load_body(&mut module), 0);
         assert_eq!(phase_body(&mut module, crate::lifecycle::Phase::Initialize.code()), 0);
@@ -1632,6 +1645,7 @@ mod tests {
 
     #[test]
     fn a_panicking_mod_is_reported_and_isolated() {
+        let _serial = crate::test_lock::serial();
         let mut module = Recorder {
             boom: true,
             ..Recorder::default()
