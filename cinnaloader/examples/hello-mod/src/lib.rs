@@ -2451,6 +2451,113 @@ impl Mod for Hello {
             );
         });
 
+        // Section 32: shaders a mod ships, and the pipeline it cannot reach.
+        tasks::schedule_after_ticks(46, move || {
+            shaders::register_include("hello:common", "uniform mat4 u_view;\nuniform float u_time;");
+            info!(
+                "shaders: register={} include={}",
+                shaders::register(
+                    shaders::Shader::new("hello:outline", shaders::ShaderStage::Fragment)
+                        .source(
+                            "uniform mat4 u_proj;\nuniform vec4 u_color;\nin vec2 v_uv;\nvoid main() {}"
+                        )
+                        .include("hello:common")
+                        .define("OUTLINE_WIDTH", "2")
+                ),
+                shaders::register_include("hello:extra", "uniform vec3 u_glow;"),
+            );
+            info!(
+                "shaders: shader={:?} uniforms={:?} attributes={:?}",
+                shaders::get("hello:outline").map(|shader| shader.to_string()),
+                shaders::get_uniforms("hello:outline")
+                    .into_iter()
+                    .map(|uniform| format!("{} {}", uniform.kind, uniform.name))
+                    .collect::<Vec<_>>(),
+                shaders::get_attributes("hello:outline")
+                    .into_iter()
+                    .map(|attribute| attribute.name)
+                    .collect::<Vec<_>>(),
+            );
+            info!(
+                "shaders: uniform(u_color)={:?} proj_components={:?} reflection={:?}",
+                shaders::get_uniform("hello:outline", "u_color").map(|uniform| uniform.components()),
+                shaders::get_uniform("hello:outline", "u_proj").map(|uniform| uniform.components()),
+                shaders::get_reflection("hello:outline"),
+            );
+            info!(
+                "shaders: define={} variant={} uniform_value={} read_back={:?}",
+                shaders::set_define("hello:outline", "ALPHA_TEST", "1"),
+                shaders::set_variant("hello:outline", "alpha_test"),
+                shaders::set_uniform("hello:outline", "u_color", "1,0,0,1"),
+                shaders::get_uniform_value("hello:outline", "u_color"),
+            );
+            info!(
+                "shaders: material={} post_process={} pass={}",
+                shaders::register_material(shaders::Material {
+                    id: "hello:glow".to_owned(),
+                    owner: "hello_mod".to_owned(),
+                    shader: "hello:outline".to_owned(),
+                    defines: Default::default(),
+                }),
+                shaders::register_post_process(shaders::PostProcess {
+                    id: "hello:bloom".to_owned(),
+                    owner: "hello_mod".to_owned(),
+                    shader: "hello:outline".to_owned(),
+                    hook: shaders::ShaderHook::BeforeFinalComposite,
+                    order: 10,
+                    active: false,
+                }),
+                shaders::register_post_process(shaders::PostProcess {
+                    id: "hello:blur".to_owned(),
+                    owner: "hello_mod".to_owned(),
+                    shader: "hello:outline".to_owned(),
+                    hook: shaders::ShaderHook::BeforeWorldOpaque,
+                    order: 0,
+                    active: false,
+                }),
+            );
+            info!(
+                "shaders: passes={:?} for_hook={} apply={} active={:?} remove={} active_now={:?}",
+                shaders::get_post_processes()
+                    .into_iter()
+                    .map(|pass| pass.id)
+                    .collect::<Vec<_>>(),
+                shaders::get_post_processes_for(shaders::ShaderHook::BeforeFinalComposite).len(),
+                shaders::apply_post_process("hello:bloom"),
+                shaders::get_active_shaders(),
+                shaders::remove_post_process("hello:bloom"),
+                shaders::get_active_shaders(),
+            );
+            info!(
+                "shaders: hooks={} audit={:?}",
+                shaders::ShaderHook::all().len(),
+                shaders::ShaderHook::all()
+                    .into_iter()
+                    .map(|hook| hook.as_str())
+                    .collect::<Vec<_>>(),
+            );
+            info!(
+                "shaders: client-side: load={} compile={} variant={} all={} reload={} errors={:?} features={:?} cache={:?} clear={}",
+                shaders::load("hello:outline"),
+                shaders::compile("hello:outline"),
+                shaders::compile_variant("hello:outline", "alpha_test"),
+                shaders::compile_all(),
+                shaders::reload(),
+                shaders::get_compile_errors(),
+                shaders::get_supported_features(),
+                shaders::get_pipeline_cache(),
+                shaders::clear_pipeline_cache(),
+            );
+            let pipeline = shaders::create_pipeline("hello:pipeline");
+            info!(
+                "shaders: pipeline_handle={pipeline} kind={:?} on_gpu={} refusals={:?} material={:?}",
+                graphics::get_resource(pipeline).map(|resource| resource.kind),
+                graphics::is_created_on_the_gpu(pipeline),
+                shaders::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                shaders::get_material("hello:glow").map(|material| material.shader),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

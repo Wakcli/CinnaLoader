@@ -642,6 +642,29 @@ Verified in a live client: seven resources in the ledger totalling 43,264 bytes,
 released with the count dropping from 7 to 6, `on_gpu=false`, the validation error and
 device-lost note read back, and every device call refused.
 
+### 32 — Shader APIs
+
+A shader is source text here, which makes most of the section real: `register`, `unregister`,
+`get`, `get_all`, `register_include`/`unregister_include`, `set_define`, `set_variant`,
+`set_uniform`/`get_uniform_value`, `get_uniform`/`get_uniforms`, `get_attributes`,
+`get_reflection`, `register_material`/`get_material`/`get_materials` and
+`register_post_process`/`unregister_post_process`/`apply_post_process`/`remove_post_process`/
+`get_post_processes`/`get_active_shaders` all work on data a mod owns.
+
+`get_reflection` is the interesting one: it reads the uniforms, attributes and defines out of
+the source a mod wrote, following its includes, and reports them the way a compiler's
+reflection would — with `ShaderVariable::components()` knowing how big a `mat4` is — without a
+compiler existing here. A pass carries one of the thirteen hooks the wishlist lists, and the
+pass list sorts the way a frame runs them.
+
+Refused: compiling, loading into the client's pipeline, its pipeline cache, its active shader
+list, a real compiler's errors (this host reports none rather than inventing them) and the
+backend's supported features. A pipeline a mod *declares* lands in section 31's ledger through
+`create_pipeline`, and `is_created_on_the_gpu` still says no. Verified in a live client: an
+outline shader with four reflected uniforms across its own source and an include, a 4-component
+`vec4` and a 16-component `mat4`, a define, a variant, a uniform value read back, two passes in
+frame order, 13 hooks, and every client call refused.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside

@@ -75,6 +75,7 @@ pub mod recipes;
 pub mod registry;
 pub mod render;
 pub mod resources;
+pub mod shaders;
 pub mod storage;
 pub mod tasks;
 pub mod version;
@@ -1340,6 +1341,9 @@ pub mod prelude {
     pub use crate::worldgen::{
         self as worldgen, Biome, Chunk, GenerationContext, GenerationPiece, Noise, PieceKind,
         Random,
+    };
+    pub use crate::shaders::{
+        self as shaders, Material, PostProcess, Shader, ShaderHook, ShaderStage, ShaderVariable,
     };
     pub use crate::storage::{
         self as storage, Format, Namespace, Storage, StoreError, StoreTransaction,
