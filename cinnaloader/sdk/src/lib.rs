@@ -54,6 +54,7 @@ pub mod events;
 pub mod fs;
 pub mod game;
 pub mod i18n;
+pub mod inventory;
 pub mod items;
 pub mod lifecycle;
 pub mod log;
@@ -1259,6 +1260,11 @@ pub mod prelude {
     pub use crate::fs::{self as fs, File, FsError, Metadata as FileMetadata, Watch};
     pub use crate::game::{self as game, Request, RequestOutcome, SessionInfo, Window};
     pub use crate::i18n::{self as i18n, Language, NumberStyle};
+    pub use crate::inventory::{
+        self as inventory, ContainerType, Inventory, InventoryError, SlotKind,
+        HOTBAR_FIRST, HOTBAR_LAST, MAIN_FIRST, MAIN_LAST, OFFHAND, ARMOUR_FIRST, ARMOUR_LAST,
+        PLAYER_SLOTS,
+    };
     pub use crate::items::{self as items, Component as ItemComponent, ItemStack, ItemType};
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};

@@ -1158,6 +1158,128 @@ impl Mod for Hello {
             info!("items: unregister={}", items::unregister("lantern"));
         });
 
+        // Section 18: an inventory this host owns, and the live one it does not.
+        tasks::schedule_after_ticks(20, move || {
+            inventory::set_local_inventory(Inventory::player());
+            info!(
+                "inventory: size={} slots={:?}..{:?} main={:?}..{:?} offhand={:?} armour={:?}..{:?} kinds={:?}",
+                inventory::get_size(),
+                inventory::HOTBAR_FIRST,
+                inventory::HOTBAR_LAST,
+                inventory::MAIN_FIRST,
+                inventory::MAIN_LAST,
+                inventory::OFFHAND,
+                inventory::ARMOUR_FIRST,
+                inventory::ARMOUR_LAST,
+                [
+                    inventory::slot_kind(0).as_str(),
+                    inventory::slot_kind(20).as_str(),
+                    inventory::slot_kind(36).as_str(),
+                    inventory::slot_kind(38).as_str(),
+                    inventory::slot_kind(50).as_str(),
+                ],
+            );
+            info!(
+                "inventory: set={:?} add={:?} count={} contains={} amount={} find={:?} all={:?} first_empty={:?}",
+                inventory::set_slot(0, Some(ItemStack::new("minecraft:stone", 64))),
+                inventory::add_item(&ItemStack::new("minecraft:stone", 100)),
+                inventory::count("minecraft:stone"),
+                inventory::contains("minecraft:stone"),
+                inventory::contains_amount("minecraft:stone", 164),
+                inventory::find("minecraft:stone"),
+                inventory::find_all("minecraft:stone"),
+                inventory::first_empty_slot(),
+            );
+            info!(
+                "inventory: can_insert={} can_extract={} insert={:?} contents={:?}",
+                inventory::can_insert(&ItemStack::new("minecraft:dirt", 1)),
+                inventory::can_extract(0),
+                inventory::insert(0, &ItemStack::new("minecraft:stone", 8)),
+                inventory::get_contents().len(),
+            );
+            info!(
+                "inventory: split={:?} merge={:?} move={:?} swap={:?} extract={:?}",
+                inventory::split_stack(0, 20).map(|stack| stack.count()),
+                inventory::merge_stacks(3, 0),
+                inventory::move_stack(0, 20).map(|stack| stack.count()),
+                inventory::swap(0, 1),
+                inventory::extract(1).map(|stack| stack.count()),
+            );
+            let revision = inventory::get_revision();
+            inventory::begin_transaction();
+            inventory::clear().ok();
+            info!(
+                "inventory: transaction open={} after clear={} rollback={} count={} revision={}",
+                inventory::get_transaction(),
+                inventory::count("minecraft:stone"),
+                inventory::rollback_transaction(),
+                inventory::count("minecraft:stone"),
+                inventory::get_revision() > revision,
+            );
+            inventory::lock();
+            info!(
+                "inventory: locked={:?} unlocked set={:?}",
+                inventory::set_slot(0, None),
+                {
+                    inventory::unlock();
+                    inventory::set_slot(0, None)
+                },
+            );
+            info!(
+                "inventory: remove={:?} size={} contents={}",
+                inventory::remove_item("minecraft:stone", 1000),
+                inventory::get_size(),
+                inventory::get_contents().len(),
+            );
+            info!(
+                "inventory: live: get={:?} selected={:?} set_selected={} armor={:?} offhand={:?} cursor={:?} set_cursor={}",
+                inventory::get().is_some(),
+                inventory::get_selected_slot(),
+                inventory::set_selected_slot(3),
+                inventory::get_armor().len(),
+                inventory::get_offhand(),
+                inventory::get_cursor_stack(),
+                inventory::set_cursor_stack(None),
+            );
+            info!(
+                "containers: register={} type={:?}",
+                inventory::register_type(
+                    ContainerType::new("crate", "Crate", 27)
+                        .property("burn_time")
+                        .title("A crate")
+                        .distance_limit(4.0)
+                        .on_slot_click()
+                        .on_property_change()
+                ),
+                inventory::get_type("crate").map(|container| container.to_string()),
+            );
+            info!(
+                "containers: types={} handler={} rule={}",
+                inventory::get_all_types().len(),
+                inventory::register_screen_handler("crate"),
+                inventory::register_slot_rule("crate", 0, "cinnaloader:lights"),
+            );
+            info!(
+                "containers: open={:?} close={} of={:?} slots={:?} properties={:?} viewers={:?} interact={:?} distance={:?} title={:?}",
+                inventory::open("crate"),
+                inventory::close(),
+                inventory::container_of("crate"),
+                inventory::get_slots(),
+                inventory::get_properties(),
+                inventory::get_viewers(),
+                inventory::can_interact(),
+                inventory::get_distance_limit(),
+                inventory::get_title(),
+            );
+            info!(
+                "containers: click={} property_change={} refusals={:?} unregister={}",
+                inventory::on_slot_click(0, 0),
+                inventory::on_property_change("burn_time", 1),
+                inventory::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                inventory::unregister_type("crate"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

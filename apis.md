@@ -53,7 +53,7 @@ guide, not a contract.
 | 15 | World and dimension APIs | 56 | done | Every name exists and answers honestly: the world half is `None`/`false` with a reason (hooks this host does not have), the dimension half is a real registry mods declare into |
 | 16 | Block APIs | 50 | done | Block types mods declare (properties, hardness, shapes, tool, drops, behaviour) plus every world question refused with a reason |
 | 17 | Item APIs | 47 | done | `ItemStack` is a real value here (create/clone/copy/split/merge/count/name/lore/damage/enchants/components); the client's item registry and the hand are refused with reasons. `get_model` is `n/a`: Bedrock draws an icon, not a model graph |
-| 18 | Inventory and containers | 50 | todo |
+| 18 | Inventory and containers | 50 | done | An `Inventory` value with the client's own slot layout (0-8 hotbar, 9-35 main, 36 offhand, 37-40 armour) and every slot operation; live slots and containers refused with reasons |
 | 19 | Entity system | 82 | todo |
 | 20 | Entity components and attributes | 27 | todo |
 | 21 | Player APIs | 65 | todo |
@@ -311,6 +311,32 @@ Verified in a live client: a pickaxe stack with 250 durability worn to 200, name
 enchanted, split and merged, and a declared lantern read back with its max stack, durability,
 tags, use action, cooldown, icon and the three component groups; the hand, the model and the
 client's registry all `None`.
+
+### 18 — Inventory and containers
+
+[`Inventory`] is a value: a slot vector using the client's own indices — `0..=8` hotbar,
+`9..=35` main, `36` offhand, `37..=40` armour — with get, set, clear, contents, add, remove,
+contains, contains_amount, count, find, find_all, first_empty_slot, can_insert, can_extract,
+insert, extract, swap, move_stack, split_stack, merge_stacks, transactions
+(begin/commit/rollback), a revision counter that changes with every slot, and a lock that
+stops changes for a mod that hands the inventory to a worker. `insert` and `merge_stacks`
+respect the slot's maximum, a move that does not fit leaves the rest where it was rather
+than losing it, and `add_item` tops up a partial stack before taking an empty slot.
+
+It is **the mod's copy**, never the player's: `inventory::get()` binds the live inventory,
+and answers `None` with the reason instead of handing back something that is not the game's.
+The live slot reads — the selected hotbar slot, armour, offhand, cursor — are refused the
+same way, and so is every `containers::` call about a live container: opening, closing,
+slots, properties, viewers, interaction distance, title.
+
+`containers::register_type` is real: a mod declares a container with its slot count,
+properties, title, distance limit and whether it has slot-click and property-change handlers,
+and every mod reads that registry. `containers::get_viewers` is `n/a` rather than refused: a
+Bedrock client has no viewer list, that is a server idea.
+
+Verified in a live client: 164 stone across three slots, a split of 20, a move that took 44,
+a transaction rolled back to 144, a lock refusing a write until it was unlocked, the whole
+live surface `None`/`false`, and a declared crate read back with its 27 slots.
 
 ## Open: a wild jump on the first frame
 
