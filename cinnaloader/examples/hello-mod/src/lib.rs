@@ -1359,6 +1359,113 @@ impl Mod for Hello {
             );
         });
 
+        // Section 20: component and attribute types a mod owns, and an entity's, which it
+        // cannot reach.
+        tasks::schedule_after_ticks(24, move || {
+            info!(
+                "components: register={} schema={:?}",
+                components::register(
+                    ComponentType::new("hello:glow")
+                        .described("a light a mod puts on its own entity")
+                        .field("colour", ConfigValue::Integer(0xff_ffff))
+                        .required_field("strength", ConfigValue::Float(1.0))
+                        .validated()
+                ),
+                components::get_schema("hello:glow")
+                    .map(|component| format!("{component} {:?}", component.schema())),
+            );
+            let mut values = ComponentSet::new();
+            let mut glow = components::create("hello:glow");
+            glow.set("colour", ConfigValue::Integer(0x00_ff00));
+            info!(
+                "components: set={} has={} get={:?} names={:?} validate={:?}",
+                components::set(&mut values, "hello:glow", glow.clone()),
+                components::has(&values, "hello:glow"),
+                components::get_value(&values, "hello:glow"),
+                components::names_in(&values),
+                components::validate("hello:glow", &glow),
+            );
+            let text = components::serialize(&glow);
+            let mut wrong = components::clone_value(&glow);
+            wrong.set("colour", ConfigValue::String("green".to_owned()));
+            info!(
+                "components: serialized={:?} deserialized={:?} serializer={} validator={} refusals={:?}",
+                text,
+                components::deserialize("hello:glow", &text),
+                components::register_serializer("hello:glow"),
+                components::register_validator("hello:glow"),
+                components::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "components: on an entity: get={:?} set={} remove={} has={:?} query_entities={:?} query_components={:?}",
+                components::get_on_entity("wisp", "hello:glow"),
+                components::set_on_entity("wisp", "hello:glow", wrong.clone()),
+                components::remove_from_entity("wisp", "hello:glow"),
+                components::entity_has("wisp", "hello:glow"),
+                components::query_entities("hello:glow").len(),
+                components::query_components("wisp").len(),
+            );
+            let mut attributes = AttributeSet::new();
+            components::attributes::set(
+                &mut attributes,
+                Attribute::new("minecraft:movement", 0.25, 0.0, 1.0),
+            );
+            components::attributes::add_modifier(
+                &mut attributes,
+                "minecraft:movement",
+                AttributeModifier {
+                    name: "boots".to_owned(),
+                    kind: ModifierKind::Add,
+                    amount: 0.05,
+                },
+            );
+            components::attributes::add_modifier(
+                &mut attributes,
+                "minecraft:movement",
+                AttributeModifier {
+                    name: "swift".to_owned(),
+                    kind: ModifierKind::Multiply,
+                    amount: 0.5,
+                },
+            );
+            info!(
+                "attributes: base={:?} current={:?} modifiers={:?}",
+                components::attributes::get_base_value(&attributes, "minecraft:movement"),
+                components::attributes::get_current_value(&attributes, "minecraft:movement"),
+                components::attributes::get_modifiers(&attributes, "minecraft:movement")
+                    .into_iter()
+                    .map(|modifier| modifier.name)
+                    .collect::<Vec<_>>(),
+            );
+            components::attributes::remove_modifier(&mut attributes, "minecraft:movement", "swift");
+            info!(
+                "attributes: after removing one={:?} modify={} register={} definitions={}",
+                components::attributes::get_current_value(&attributes, "minecraft:movement"),
+                components::attributes::modify(&mut attributes, "minecraft:movement", 0.9),
+                components::attributes::register(AttributeDefinition {
+                    name: "hello:focus".to_owned(),
+                    owner: "hello_mod".to_owned(),
+                    default: 0.0,
+                    minimum: 0.0,
+                    maximum: 10.0,
+                }),
+                components::attributes::definitions().len(),
+            );
+            info!(
+                "attributes: live: get={:?} set={} ecs: register_system={} run_system={} order={:?}",
+                components::attributes::get_live("wisp", "minecraft:movement"),
+                components::attributes::set_live("wisp", "minecraft:movement", 5.0),
+                components::register_system("hello:tick"),
+                components::run_system("hello:tick"),
+                components::get_system_order(),
+            );
+            info!(
+                "components: unregister={} attribute_unregister={}",
+                components::unregister("hello:glow"),
+                components::attributes::unregister("hello:focus"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

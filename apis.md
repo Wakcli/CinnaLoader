@@ -55,7 +55,7 @@ guide, not a contract.
 | 17 | Item APIs | 47 | done | `ItemStack` is a real value here (create/clone/copy/split/merge/count/name/lore/damage/enchants/components); the client's item registry and the hand are refused with reasons. `get_model` is `n/a`: Bedrock draws an icon, not a model graph |
 | 18 | Inventory and containers | 50 | done | An `Inventory` value with the client's own slot layout (0-8 hotbar, 9-35 main, 36 offhand, 37-40 armour) and every slot operation; live slots and containers refused with reasons |
 | 19 | Entity system | 82 | done | Entity types mods declare (families, size, health, attributes, components) with the client's live entity world refused name by name, and 18 entity event kinds registered |
-| 20 | Entity components and attributes | 27 | todo |
+| 20 | Entity components and attributes | 27 | done | Component types and attribute sets a mod owns (fields, validation, serialisation, modifiers applied the game's way); attaching to a live entity refused; the ECS/system names are `n/a` |
 | 21 | Player APIs | 65 | todo |
 | 22 | Status effects and damage | 29 | todo |
 | 23 | Physics and collision | 35 | todo |
@@ -360,6 +360,33 @@ kinds are registered on the section 6 bus for the day the hooks land.
 Verified in a live client: a wisp declared and read back with its size, health, both
 attributes, families and component; its bounding box at a position; and every live question
 `None` with spawn, damage, teleport, mount, glowing and attribute changes all refused.
+
+### 20 — Entity components and attributes
+
+The real half is a component *type* registry and a value tree: a mod registers a component
+with its fields, required fields and defaults, then creates, clones, serialises,
+deserialises and validates values against it, with `register_serializer` checking the round
+trip and `register_validator` making the schema refuse a bad value before it is stored.
+Attributes are the same shape and more: `AttributeSet` holds a base, an optional range and
+modifiers of the three kinds the game has, and `current()` applies them in the game's own
+order — additive first, then multipliers, then the total multiplier — clamped to the range.
+Verified live: `0.25 + 0.05` then `× 1.5` gave `0.44999999999999996`, and removing the
+multiplier put it back to `0.3`.
+
+The refused half: attaching a component to a live entity, querying entities for components,
+and an attribute's value on an entity all need the client's entity store, which section 19
+already refuses for want of a hook.
+
+The `n/a` half, said out loud rather than dressed up as a missing hook:
+`components::register_system`, `unregister_system`, `run_system`, `get_system_order`,
+`set_system_order` and `attributes::register`/`unregister` name an ECS and a system scheduler
+for mods. A Bedrock client has neither, so there is no target. `attributes::register` and
+`unregister` *do* work in the honest sense — a mod owns attribute definitions — and the
+functions that would add one to the client's engine are the ECS ones.
+
+Verified in a live client: a glow component registered with a required field, a value set,
+validated twice (once clean, once with a field of the wrong kind), serialised and read back,
+the entity half `None`/`false`, and the attribute half with both modifier kinds.
 
 ## Open: a wild jump on the first frame
 

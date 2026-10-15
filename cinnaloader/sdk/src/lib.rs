@@ -47,6 +47,7 @@ use std::{
 pub mod blocks;
 pub mod capability;
 pub mod compat;
+pub mod components;
 pub mod config;
 pub mod deps;
 pub mod diagnostics;
@@ -1244,6 +1245,10 @@ pub mod prelude {
     pub use crate::blocks::{
         self as blocks, BlockBehaviour, BlockDescription, BlockMaterial, BlockProperty,
         BlockShapes, ToolRequirement,
+    };
+    pub use crate::components::{
+        self as components, Attribute, AttributeDefinition, AttributeModifier, AttributeSet,
+        ComponentData, ComponentField, ComponentSet, ComponentType, ComponentValue, ModifierKind,
     };
     pub use crate::config::{
         self as config, ConfigCategory, ConfigComment, ConfigConstraint, ConfigEntry, ConfigGroup,
