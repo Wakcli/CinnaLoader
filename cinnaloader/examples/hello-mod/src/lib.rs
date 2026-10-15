@@ -17,6 +17,13 @@ mod s62;
 mod s63;
 mod s64;
 
+mod s65;
+mod s66;
+mod s67;
+mod s68;
+mod s69;
+mod s70;
+
 use cinnaloader::prelude::*;
 
 /// Whether a section's demonstration should run: every one of them when nothing is set, or
@@ -5045,6 +5052,27 @@ impl Mod for Hello {
             }
             for line in s64::run() {
                 info!("s64 | {line}");
+            }
+        });
+
+        tasks::schedule_after_ticks(104, move || {
+            for line in s65::run() {
+                info!("s65 | {line}");
+            }
+            for line in s66::run() {
+                info!("s66 | {line}");
+            }
+            for line in s67::run() {
+                info!("s67 | {line}");
+            }
+            for line in s68::run() {
+                info!("s68 | {line}");
+            }
+            for line in s69::run() {
+                info!("s69 | {line}");
+            }
+            for line in s70::run() {
+                info!("s70 | {line}");
             }
         });
 
