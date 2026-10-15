@@ -1,0 +1,14 @@
+[package]
+name = "cinnaloader-native"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Symbol resolution and inline hooking for the Cinnamods loader"
+
+[dependencies]
+anyhow = "1"
+object = { version = "0.36", features = ["read"] }
+rustc-demangle = "0.1"
+
+[target.'cfg(any(target_arch = "x86_64", target_arch = "x86"))'.dependencies]
+ilhook = "2"

@@ -1,0 +1,9 @@
+[package]
+name = "cinnaloader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ABI a Cinnamods mod cdylib speaks with the loader"
+
+[lib]
+crate-type = ["rlib"]

@@ -1,0 +1,13 @@
+[package]
+name = "cinnaloader-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Cinnaloader launcher and loader CLI"
+
+[[bin]]
+name = "cinnaloader"
+path = "src/main.rs"
+
+[dependencies]
+cinnaloader-loader = { path = "../loader", features = ["gui"] }

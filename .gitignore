@@ -1,0 +1,11 @@
+# Build output
+target/
+
+# Loaded mod libraries and their runtime config
+*.so
+*.dylib
+*.dll
+*.cfg
+
+# Local scratch
+.local/

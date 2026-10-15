@@ -1,0 +1,18 @@
+[package]
+name = "cinnaloader-loader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Loads and drives Cinnamods mod cdylibs through the C ABI"
+
+[features]
+default = []
+gui = ["dep:eframe", "dep:device_query", "dep:winit"]
+
+[dependencies]
+anyhow = "1"
+cinnaloader = { path = "../sdk" }
+libloading = "0.8"
+device_query = { version = "2", optional = true }
+eframe = { version = "0.36", optional = true }
+winit = { version = "0.30", optional = true, features = ["x11", "wayland"] }

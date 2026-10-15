@@ -1,0 +1,15 @@
+[package]
+name = "cinnaloader-preload"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LD_PRELOAD runtime that starts the loader inside the target process"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cinnaloader-loader = { path = "../loader" }
+cinnaloader-native = { path = "../native" }
+ctor = "0.2"
+device_query = "2"
