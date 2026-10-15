@@ -992,6 +992,8 @@ mod tests {
 
     #[test]
     fn a_component_value_renders_and_reads_back() {
+        let _serial = serial();
+        fresh();
         let value = ComponentData::new(&[
             ("colour", ConfigValue::Integer(0xff0000)),
             ("strength", ConfigValue::Float(1.5)),

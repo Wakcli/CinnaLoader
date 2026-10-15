@@ -1951,6 +1951,117 @@ impl Mod for Hello {
             );
         });
 
+        // Section 26: world generation a mod ships, and noise it can run itself.
+        tasks::schedule_after_ticks(34, move || {
+            info!(
+                "worldgen: register_biome={} settings={:?}",
+                worldgen::register_biome(
+                    worldgen::Biome::new("hello:sky", "Sky")
+                        .temperature(0.4)
+                        .downfall(0.1)
+                        .surface("minecraft:snow_block", "minecraft:dirt")
+                        .feature("hello:clouds")
+                ),
+                worldgen::get_biome_settings("hello:sky").map(|biome| biome.to_string()),
+            );
+            info!(
+                "worldgen: pieces: feature={} ore={} carver={} surface={} placement={} noise={} density={}",
+                worldgen::register_feature(
+                    worldgen::GenerationPiece::new(worldgen::PieceKind::Feature, "hello:trees")
+                        .named("Trees")
+                        .setting("count", "8")
+                ),
+                worldgen::register_ore(worldgen::GenerationPiece::new(worldgen::PieceKind::Ore, "hello:ore")),
+                worldgen::register_carver(worldgen::GenerationPiece::new(worldgen::PieceKind::Carver, "hello:cave")),
+                worldgen::register_surface_rule(worldgen::GenerationPiece::new(worldgen::PieceKind::SurfaceRule, "hello:rule")),
+                worldgen::register_placement_rule(worldgen::GenerationPiece::new(worldgen::PieceKind::PlacementRule, "hello:place")),
+                worldgen::register_noise(worldgen::GenerationPiece::new(worldgen::PieceKind::Noise, "hello:noise")),
+                worldgen::register_density_function(worldgen::GenerationPiece::new(worldgen::PieceKind::DensityFunction, "hello:density")),
+            );
+            info!(
+                "worldgen: dimension={} type={} source={} generator={} structure={} callback={} features={} pieces={}",
+                worldgen::register_dimension(worldgen::GenerationPiece::new(worldgen::PieceKind::Dimension, "hello:sky_dim")),
+                worldgen::register_dimension_type(worldgen::GenerationPiece::new(worldgen::PieceKind::DimensionType, "hello:sky_type")),
+                worldgen::register_biome_source(worldgen::GenerationPiece::new(worldgen::PieceKind::BiomeSource, "hello:source")),
+                worldgen::register_chunk_generator(worldgen::GenerationPiece::new(worldgen::PieceKind::ChunkGenerator, "hello:gen")),
+                worldgen::register_structure(worldgen::GenerationPiece::new(worldgen::PieceKind::Structure, "hello:tower")),
+                worldgen::register_chunk_callback("hello:gen"),
+                worldgen::add_placed_feature("hello:sky", "hello:trees"),
+                worldgen::get_pieces(None).len(),
+            );
+            info!(
+                "worldgen: settings: noise={:?} generation={:?} structure={:?} biomes={} by_name={:?}",
+                worldgen::get_noise_settings("hello:noise").map(|piece| piece.name),
+                worldgen::get_generation_settings("hello:gen").map(|piece| piece.to_string()),
+                worldgen::get_structure_settings("hello:tower").is_some(),
+                worldgen::get_biomes().len(),
+                worldgen::get_biome_by_name("Sky").map(|biome| biome.id),
+            );
+            let mut random = worldgen::Random::new(42);
+            let mut other = worldgen::Random::new(42);
+            info!(
+                "worldgen: random: same_seed_repeats={} draw={} range={} chance={} pick={:?} chunk_seeded={}",
+                random.next_u32() == other.next_u32(),
+                worldgen::Random::new(7).next_f64(),
+                worldgen::Random::new(7).next_range(1, 6),
+                worldgen::Random::new(7).chance(0.5),
+                worldgen::Random::new(7).pick(&["a", "b", "c"]),
+                worldgen::Random::for_position(9, 1, 2).next_u32()
+                    == worldgen::Random::for_position(9, 1, 2).next_u32(),
+            );
+            let noise = worldgen::Noise::new(42);
+            info!(
+                "worldgen: noise: at={:.4} fractal={:.4} two_seeds_differ={} same_seed_same={}",
+                noise.at_2d(1.5, 2.5),
+                noise.fractal(0.5, 0.5, 4, 0.5),
+                noise.at_2d(1.5, 2.5) != worldgen::Noise::new(43).at_2d(1.5, 2.5),
+                noise.at_2d(1.5, 2.5) == worldgen::Noise::new(42).at_2d(1.5, 2.5),
+            );
+            let context = worldgen::GenerationContext::new(42, (0, 0)).dimension("hello:sky_dim");
+            let generator = |_x: usize, _z: usize, y: i32| -> String {
+                if y < 64 {
+                    "minecraft:stone".to_owned()
+                } else {
+                    "minecraft:air".to_owned()
+                }
+            };
+            let chunk = worldgen::generate_chunk(&context, &generator);
+            let again = worldgen::generate_chunk(&context, &generator);
+            info!(
+                "worldgen: chunk={chunk} origin={:?} height={:?} biome={:?} same_twice={} solid={}",
+                context.origin(),
+                worldgen::get_height_at(&chunk, 0, 0),
+                worldgen::get_biome_at(&chunk, 0, 0),
+                chunk.blocks == again.blocks,
+                chunk.solid_count(),
+            );
+            let mut editable = worldgen::Chunk::empty((0, 0));
+            editable.set_block(0, 64, 0, "minecraft:stone");
+            let populated = worldgen::populate_chunk(&mut editable, &context, &generator);
+            info!(
+                "worldgen: populate={} feature={} structure={} block={:?}",
+                populated,
+                worldgen::place_feature(&mut editable, 1, 70, 1, "minecraft:oak_log"),
+                worldgen::place_structure(&mut editable, 2, 70, 2, (2, 2, 2), "minecraft:oak_planks"),
+                editable.block(0, 65, 0),
+            );
+            info!(
+                "worldgen: live: seed={:?} random={:?} generator={:?} context={:?} order={} refusals={:?}",
+                worldgen::get_seed(),
+                worldgen::get_random(),
+                worldgen::get_generator(),
+                worldgen::create_generation_context(),
+                worldgen::modify_generation_order("hello:first"),
+                worldgen::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "worldgen: unregister: biome={} feature={} structure={}",
+                worldgen::unregister_biome("hello:sky"),
+                worldgen::unregister_feature("hello:trees"),
+                worldgen::unregister_structure("hello:tower"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

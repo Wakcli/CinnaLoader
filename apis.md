@@ -504,6 +504,34 @@ Verified in a live client: the constants; `walk=0.1 sprint=0.13 sneak=0.03`, jum
 `1.102`, step `0.6`; 20 ticks of walking moving 2.0 blocks and sprinting 2.6; a jump rising to
 `64.63`; flying up `0.25` and down `0.25` in five ticks; and the whole live surface `None`.
 
+### 26 — World generation
+
+Everything a data pack describes, a mod registers here, and every kind is a real entry in a
+real registry: biomes with their temperature, downfall, surface blocks, features and
+structures; and generation pieces of twelve kinds — feature, structure, ore, carver, surface
+rule, placement rule, noise, density function, dimension, dimension type, biome source and
+chunk generator — each with the settings a mod gives it, read back by kind and by id.
+
+More than the section's name suggests is real, because a mod can generate for itself:
+`Random`, a seeded xorshift64* with `next_u32`, `next_f64`, `next_range`, `chance`, `pick` and
+`for_position(seed, x, z)`, which is the shape the game uses to seed a chunk; `Noise`, a
+Perlin-shaped function with `at`, `at_2d` and `fractal`, said to be *this loader's noise and
+not bit-identical to the client's*; `GenerationContext`, which knows its origin and its own
+`random()`; `Chunk`, sixteen by sixteen columns of block names with `set_block`, `block`,
+`height_at`, `biome_at` and `solid_count`; and `generate_chunk`, `populate_chunk`,
+`place_feature`, `place_structure`, `get_height_at` and `get_biome_at` over a generator or a
+chunk a mod owns.
+
+Refused: the client's seed, its generator, its random, its ordering, and a generation
+context pointed at the client's world — none of which this host can be told about, because
+the client generates its own world without calling out.
+
+Verified in a live client: a biome registered with its settings; twelve pieces across every
+kind, with the chunk generator's callback recorded; the same seed drawing the same numbers
+twice and a different one drawing different ones; noise reproducibly seeded; a 32,589-block
+chunk generated twice identically from one seed; `populate_chunk` filling 256 columns and a
+2×2×2 structure placing eight blocks.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside

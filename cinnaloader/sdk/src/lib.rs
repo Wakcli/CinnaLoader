@@ -71,9 +71,10 @@ pub mod player;
 pub mod raycast;
 pub mod resources;
 pub mod storage;
-pub mod world;
 pub mod tasks;
 pub mod version;
+pub mod world;
+pub mod worldgen;
 
 /// Bumped whenever `HostApi` or any entry-point signature changes. A mod whose
 /// [`Mod`] crate declared a different value is refused at load.
@@ -1312,6 +1313,10 @@ pub mod prelude {
     pub use crate::world::{
         self as world, dimensions, AmbientProperties, DimensionDescription, DimensionKind,
         Refusal, RespawnRules, WorldInfo,
+    };
+    pub use crate::worldgen::{
+        self as worldgen, Biome, Chunk, GenerationContext, GenerationPiece, Noise, PieceKind,
+        Random,
     };
     pub use crate::storage::{
         self as storage, Format, Namespace, Storage, StoreError, StoreTransaction,
