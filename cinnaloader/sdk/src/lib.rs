@@ -1415,6 +1415,49 @@ pub use crate::testing::{
         self as memory, AllocError, Arena, ArenaInfo, HeapInfo, Leak, OwnerBytes, OwnerDelta,
         Pool as MemoryPool, PoolError, PoolStats, PressureEvent, ResourceStats, Slab, SlabInfo,
     };
+    pub use crate::dev::{
+    self as dev, BlockedReload, Fingerprint, PlannedReload, QueueState, ReloadKind, ReloadPlan,
+    ReloadRequest,
+};
+// §72 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §72 — `pub mod scripting;` is already declared. Export the module alias and its types; its
+    // §72 — free functions are reached as `scripting::…`. `Value` is already `serialization::Value`
+    // §72 — in the prelude, so scripting's `Value` is aliased to `ScriptValue`.
+pub use crate::scripting::{self as scripting, RuntimeStats, ScriptError, Value as ScriptValue};
+// §73 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §73 — `interop::Value` is a re-export of `config::ConfigValue`, which the prelude already
+    // §73 — carries, so it is not re-exported here; call arguments are written `ConfigValue`.
+pub use crate::interop::{
+    self as interop, ApiConsumer, ApiError, ApiProvider, CompatibilityAdapter,
+    CompatibilityStatus, Extension, ExtensionPoint, MethodSpec, ModApi, ModBridge, ReturnKind,
+    Service, SharedDataStore,
+};
+// §74 — manager wires these into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §74 — `pub mod reflection;` and `pub mod accessors;` are already declared (lines 74-75).
+    // §74 — no name in these two modules collides with the existing prelude, so no aliases.
+pub use crate::reflection::{
+    self as reflection, AccessKind, Adapter, FieldAccessor, FieldDescriptor, FieldMetadata,
+    Invoker, MethodDescriptor, MethodMetadata, ReflectError, ReflectValue, Symbol, TypeDescriptor,
+    TypeMetadata,
+};
+    pub use crate::accessors::{
+    self as accessors, AccessError, AccessForm, Accessor, Method, ValueStore,
+};
+// §75 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §75 — `pub mod patches;` is already declared (line 76) and s75 is already wired in
+    // §75 — examples/hello-mod/src/lib.rs, so only the prelude export below is new.
+    // §75 — `Patch` already names data::Patch in the prelude, so patches::Patch is aliased.
+pub use crate::patches::{
+    self as patches, AppliedPatch, ChainStep, Conflict, InjectionPoint, Patch as CodePatch,
+    PatchError, PatchStatus, Pattern, Rename, TransformationReport, Transformer,
+};
+// §76 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §76 — `pub mod datadriven;` is already declared. No type-name collisions: none of
+    // §76 — Document/DocumentSchema/SchemaField/Validation/Reference/DocumentError is in the prelude.
+    // §76 — the 15 wishlist names are reached as `datadriven::load`, `datadriven::reload`, etc.
+pub use crate::datadriven::{
+    self as datadriven, Document, DocumentError, DocumentSchema, Reference, SchemaField, Validation,
+};
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
         State as DrawState, Transform,

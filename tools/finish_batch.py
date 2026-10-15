@@ -34,6 +34,8 @@ def wanted(number: int, module: str) -> list[str]:
     names = re.findall(rf"^{module}::([a-z_0-9]+)", text, re.M)
     if not names:
         names = re.findall(r"^([a-z_0-9]+)\(\)", text, re.M)
+    if not names:
+        names = re.findall(r"^[A-Z][A-Za-z]+::([a-z_0-9]+)", text, re.M)
     return sorted(set(names))
 
 
