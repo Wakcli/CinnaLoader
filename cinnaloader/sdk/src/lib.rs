@@ -1586,6 +1586,33 @@ pub use crate::tools::{
     self as tools, BuildReport, Change as ToolChange, Diff, Document as ToolDocument, EditorContext,
     Error as ToolsError, Item, Problem, Project, Report as ToolReport, Tool, ToolKind,
 };
+    pub use crate::editor::{
+        self as editor, Build, Error as EditorError, Node, NodeKind, Project as EditorProject,
+        Report as EditorReport, Selection, Status as EditorStatus,
+    };
+    pub use crate::docs::{
+        self as docs, DocKind, Entry as DocEntry, Hit, Param, Rank,
+    };
+    pub use crate::api::{
+        self as api, Change as ApiChange, ChangeKind as ApiChangeKind, Diff as ApiDiff, ApiItem,
+        ApiKind, Support as ApiSupport, Stability,
+    };
+    pub use crate::network_debug::{
+        self as network_debug, Bucket, Capture, Diff as NetworkDiff, Filter as NetworkFilter,
+        Record as NetworkRecord, ReplayReport, SizeStats, Statistics as NetworkDebugStatistics,
+    };
+    pub use crate::server::{
+        self as server, Ban, JoinRefused, Kick, Player, PlayerData, Server, ServerProperties,
+        ServerState, Session, Transition as ServerTransition, TransitionRefused, World,
+        WorldData,
+    };
+    pub use crate::server_permissions::{
+        self as server_permissions, Decision, Error as PermissionError, Node as Server_permissionsNode, Role, User,
+    };
+    pub use crate::accessibility::{
+        self as accessibility, AccessibilitySettings as A11ySettings, AccessOption,
+        AccessibleWidget, Caption, ColorPalette, OptionChange, OptionError,
+    };
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
         State as DrawState, Transform,

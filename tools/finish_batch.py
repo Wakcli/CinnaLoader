@@ -64,24 +64,27 @@ def check(number: int, modules: list[str]) -> tuple[int, list[str]]:
 
 
 def merge_prelude(number: int) -> int:
-    """Insert a lane's prelude statements whole, or not at all.
+    """Insert a lane's prelude statements, re-indented canonically, or not at all.
 
-    The file a lane writes is a sequence of `pub use crate::x::{...};` statements, sometimes
-    wrapped across lines, so it is split on brace depth rather than by line: a half-inserted
-    statement leaves the prelude with an unclosed delimiter.
+    A lane writes its own file in whatever indentation it likes, and a statement whose closing
+    `};` lands in column 0 closes `pub mod prelude` early and turns the rest of the prelude into
+    module-level code. So each statement is re-emitted at a fixed indent: the `pub use` line at
+    four spaces, its names at eight, the closing brace at four.
     """
     source = LANES / f"{number}.prelude"
     if not source.exists():
         return 0
-    statements, depth, current = [], 0, []
-    for line in source.read_text().splitlines():
-        if not line.strip():
+    raw = [
+        line.strip()
+        for line in source.read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#") and not line.strip().startswith("//")
+    ]
+    text = " ".join(raw)
+    statements = []
+    for chunk in text.split("pub use "):
+        if not chunk.strip():
             continue
-        current.append(line if depth or line.strip().startswith("pub use") else "    " + line.strip())
-        depth += line.count("{") - line.count("}")
-        if depth <= 0 and any("pub use" in held for held in current):
-            statements.append("\n".join(current))
-            current = []
+        statements.append("pub use " + chunk.strip().rstrip(";").strip() + ";")
     path = ROOT / "cinnaloader" / "sdk" / "src" / "lib.rs"
     body = path.read_text()
     if not body.endswith("\n"):
@@ -89,11 +92,26 @@ def merge_prelude(number: int) -> int:
     added = 0
     for statement in statements:
         module = re.search(r"crate::([a-z_]+)::", statement)
-        if module and f"pub use crate::{module.group(1)}::{{" in body:
+        if not module:
             continue
-        indent = "    " if not statement.startswith(" ") else ""
+        if f"pub use crate::{module.group(1)}::{{" in body:
+            continue
+        head, _, rest = statement.partition("{")
+        names, _, _ = rest.rpartition("}")
+        names = [name.strip() for name in names.split(",") if name.strip()]
+        rendered = [("    " + head.strip().rstrip() + "{")]
+        line = "        "
+        for name in names:
+            piece = name + ","
+            if len(line) + len(piece) > 96:
+                rendered.append(line.rstrip())
+                line = "        "
+            line += piece + " "
+        rendered.append(line.rstrip())
+        rendered.append("    };")
+        block = "\n".join(rendered) + "\n"
         anchor = "    pub use crate::draw::{"
-        body = body.replace(anchor, indent + statement.strip() + "\n" + anchor, 1)
+        body = body.replace(anchor, block + anchor, 1)
         added += 1
     path.write_text(body)
     return added
