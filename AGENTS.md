@@ -53,6 +53,18 @@ implementing the fullest practical version of the wishlist.
    mod attached and the toggle log appeared" is a verified claim. "This should work" is not
    a claim at all.
 
+## Commits and branches
+
+Commit and push your changes to the current working branch after every significant feature,
+major milestone, or worthwhile fix. Keep commits focused and descriptive, ensure tests pass
+before pushing where practical, and never push directly to `main` unless explicitly
+instructed.
+
+In practice: the working branch is `dev`. `main` is the base it came from; put work on
+`dev` and leave `main` alone unless the user asks for it by name. A finished section of
+`apis.md` is a commit — say what was implemented, what the in-game evidence was, and which
+`apis.md` row it closes.
+
 ## Facts that keep the loader honest
 
 - **ABI.** Any change to `HostApi`, the entry points, or a type that crosses the boundary
