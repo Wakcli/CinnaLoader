@@ -65,6 +65,7 @@ pub mod lifecycle;
 pub mod log;
 pub mod metadata;
 pub mod modinfo;
+pub mod models;
 pub mod mods;
 pub mod movement;
 pub mod permissions;
@@ -1308,6 +1309,10 @@ pub mod prelude {
     };
     pub use crate::player::{
         self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics,
+    };
+    pub use crate::models::{
+        self as models, Animation, AnimationController, Bone, BoneTransform, Keyframe, LoopMode,
+        Model, ModelPart, Playback,
     };
     pub use crate::movement::{
         self as movement, Input, MovementMode, MovementProfile, MovementStep,

@@ -2705,6 +2705,147 @@ impl Mod for Hello {
             );
         });
 
+        // Section 34: models a mod ships, and an animation it drives itself.
+        tasks::schedule_after_ticks(50, move || {
+            if !demo(34) {
+                return;
+            }
+            info!(
+                "models: register={} model={:?}",
+                models::register(
+                    Model::new("hello:cube")
+                        .bone(Bone::new("body").at(0.0, 1.0, 0.0))
+                        .bone(Bone::new("lid").parent("body").at(0.0, 2.0, 0.0))
+                        .part(
+                            ModelPart::new("shell", "body")
+                                .vertices(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0])
+                                .indices(&[0, 1, 2])
+                                .material("minecraft:entity")
+                                .texture("hello:skin")
+                        )
+                        .part(ModelPart::new("top", "lid"))
+                ),
+                models::get("hello:cube").map(|model| model.to_string()),
+            );
+            info!(
+                "models: bones={:?} parts={:?} materials={:?} bounds={:?} chain={:?}",
+                models::get_bones("hello:cube")
+                    .into_iter()
+                    .map(|bone| (bone.name, bone.parent))
+                    .collect::<Vec<_>>(),
+                models::get_parts("hello:cube")
+                    .into_iter()
+                    .map(|part| part.name)
+                    .collect::<Vec<_>>(),
+                models::get_materials("hello:cube"),
+                models::get_bounds("hello:cube"),
+                models::get("hello:cube").map(|model| model.chain_of("lid")),
+            );
+            info!(
+                "models: vertices={:?} indices={:?} set_material={} set_texture={} transform={} visibility={}",
+                models::get_vertices("hello:cube")
+                    .into_iter()
+                    .map(|(part, vertices)| (part, vertices.len()))
+                    .collect::<Vec<_>>(),
+                models::get_indices("hello:cube")
+                    .into_iter()
+                    .map(|(part, indices)| (part, indices.len()))
+                    .collect::<Vec<_>>(),
+                models::set_material("hello:cube", "shell", "minecraft:glow"),
+                models::set_texture("hello:cube", "shell", "hello:other_skin"),
+                models::set_transform("hello:cube", "lid", models::BoneTransform::rotated(45.0, 0.0, 0.0)),
+                models::set_visibility("hello:cube", "top", false),
+            );
+            let exported = models::export("hello:cube").unwrap_or_default();
+            info!(
+                "models: export={:?} import={:?} loader={} entity_renderer={} block_renderer={} item_renderer={}",
+                exported.lines().count(),
+                models::import(&exported).map(|model| model.id),
+                models::register_loader("hello:own_format"),
+                models::register_entity_renderer("hello:cube_entity"),
+                models::register_block_renderer("minecraft:stone"),
+                models::register_item_renderer("minecraft:stick"),
+            );
+            info!(
+                "models: renderers={:?} loaders={:?} client: load={} reload={} refusals={:?}",
+                models::get_renderers().len(),
+                models::get_loaders().len(),
+                models::load("hello:cube"),
+                models::reload(),
+                models::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            models::register_animation(
+                Animation::new("hello:open")
+                    .frame(Keyframe::new("lid", 0, models::BoneTransform::at(0.0, 2.0, 0.0)))
+                    .frame(Keyframe::new("lid", 1000, models::BoneTransform::rotated(90.0, 0.0, 0.0)))
+                    .looping(models::LoopMode::Once),
+            );
+            models::register_animation(
+                Animation::new("hello:idle")
+                    .frame(Keyframe::new("body", 0, models::BoneTransform::at(0.0, 1.0, 0.0)))
+                    .frame(Keyframe::new("body", 500, models::BoneTransform::at(0.0, 1.1, 0.0))),
+            );
+            info!(
+                "animations: animations={:?} bones={:?} length={:?}",
+                models::get_animations()
+                    .into_iter()
+                    .map(|animation| format!("{animation}"))
+                    .collect::<Vec<_>>(),
+                models::get_animation("hello:open").map(|animation| animation.bones()),
+                models::get_animation("hello:open").map(|animation| animation.length()),
+            );
+            info!(
+                "animations: play={} time={:?} advance={:?} speed={} advance2={:?} pause={} advance3={:?} resume={}",
+                models::play("hello:open"),
+                models::get_time("hello:open"),
+                {
+                    models::advance(250);
+                    models::get_time("hello:open")
+                },
+                models::set_speed("hello:open", 2.0),
+                {
+                    models::advance(250);
+                    models::get_time("hello:open")
+                },
+                models::pause("hello:open"),
+                {
+                    models::advance(250);
+                    models::get_time("hello:open")
+                },
+                models::resume("hello:open"),
+            );
+            info!(
+                "animations: crossfade={} state={:?} blend={:?}",
+                models::crossfade("hello:open", "hello:idle", 1000),
+                models::get_state()
+                    .into_iter()
+                    .map(|playback| (playback.animation, playback.weight))
+                    .collect::<Vec<_>>(),
+                {
+                    models::advance(500);
+                    models::blend()
+                },
+            );
+            info!(
+                "animations: skeleton={:?} bone={:?} set_bone={} set_time={} parameter={:?}",
+                models::get_skeleton("hello:cube", "hello:idle", 250).len(),
+                models::get_bone_transform("hello:cube", "hello:idle", "body", 250),
+                models::set_bone_transform("hello:cube", "body", models::BoneTransform::at(0.0, 0.0, 0.0)),
+                models::set_time("hello:idle", 100),
+                {
+                    models::set_parameter("open", 0.5);
+                    models::get_parameter("open")
+                },
+            );
+            info!(
+                "animations: handlers={} stop={} stop_all={} controller={:?}",
+                models::register_animation_event("hello:on_step"),
+                models::stop("hello:idle"),
+                models::stop_all(),
+                models::get_animation_controller().parameters().len(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

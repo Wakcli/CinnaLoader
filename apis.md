@@ -692,6 +692,32 @@ written, three sprites placed at `0,0` / `8,0` / `0,8` with UVs `(0, 0, 0.5, 0.5
 `(0, 0.5, 0.5, 1)`, 192 pixels stitched, an animation giving frame 1 at 150 ms and frame 0 at
 400 ms as it loops, and every upload refused.
 
+### 34 — Models and animations
+
+A model is real data: bones with a parent and a transform, parts with vertices, indices, a
+material and a texture, visibility per bone and part, bounds worked out from the vertices,
+a bone chain walked up to the root, and an `export`/`import` pair that round-trips a model as
+text — the counts and the transforms, with the vertex values left to the mod that owns them.
+`create`, `create_mesh` and `create_bone` build one; `set_material`, `set_texture`,
+`set_transform` and `set_visibility` change it.
+
+The animation side is where a mod can do genuine work, and it is all real: keyframes per bone,
+`length`, `time_at` with the four loop modes (once, loop, ping-pong, hold), and `sample`
+interpolating between the keyframes around a moment. A `Playback` carries time, speed,
+looping, pause and blend weight and advances with `advance`; a `crossfade` moves the weights
+from one animation to the other; `blend` normalises them; parameters, controllers and a
+`get_skeleton` that samples every bone from the model's own animation complete the picture.
+
+Refused: loading a model into the client, its own model loaders, and the entity, block and
+item renderers and keyframe handlers, which are recorded as declarations and never called
+here.
+
+Verified in a run of the loader with the mod attached: a two-bone cube with bounds
+`(0, 0, 0)`–`(1, 1, 1)` and the chain `lid → body`; a five-line export read back by `import`;
+an animation played to 250 ms, doubled in speed to 750 ms, held there by `pause`, and a
+crossfade giving a 50/50 blend; and a skeleton sampled at 250 ms of a 500 ms animation giving
+`(0, 1.05, 0)`, which is the interpolated midpoint of `1.0` and `1.1`.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside
