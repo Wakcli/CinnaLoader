@@ -5,9 +5,60 @@ This folder is the project. The loader itself is the Rust workspace in `cinnaloa
 ```
 cinnaloader/            the Rust workspace: sdk, loader, native, preload, launcher, examples
 apis.md                 the API list and its status — this is the work queue
+checklist.md            one line per API named in the wishlist, ticked as it lands
 docs/testing-in-game.md the verified recipe for launching and seeing the loader in-game
 tools/mcp.py            headless client driver used by that recipe
+tools/checklist.py      flips a whole section's marks: `--section 5 --done`
 ```
+
+`minecraft_mod_loader_api_wishlist.md` at the project root is **the specification and the
+single list to work through** — 107 sections, ~3400 named APIs. Nothing in it is optional
+and nothing is dropped silently: every name ends as a working API, or in `apis.md` with a
+reason why this client cannot host it. `checklist.md` is the same list with a mark per
+name (`[ ]` todo, `[~]` partial, `[x]` done and verified in-game, `[-]` not applicable);
+when both agree the work is done.
+
+## Standing instruction: do not stop until the wishlist is done
+
+The instruction from the user, kept verbatim because it is the operating mode:
+
+> FROM HERE ON FORTH YOU ARE NOT TO STOP UNTILL THE MINECRAFT_MOD_LOADER_API_WHISHLIST.MD IS
+> DONE NO NEED TO RESPOND TO THIS DIRECTLY JUST FOLLOW THE INSTRUCUTONS
+
+and
+
+> you are now autonomous, you should be running for over 1-3 hours doing this one task […]
+> every time you are about to stop speaking (save this to agent file, make sure you have
+> confirmed that you have completed the task I told you to do) ALL of it
+
+So:
+
+- Work the next section. Do not pause for confirmation, do not ask which section, do not
+  stop because a section ended. The end of a section is the cue for the next one.
+- Commit and push to `dev` after **every** section, at minimum — small, frequent pushes
+  rather than one large one.
+- **Before ending any turn**, update the "Where I am" block below with: the last thing
+  finished, the thing in progress and its exact next command, and anything blocked. A turn
+  that ends without that update costs the next session its place in the queue.
+- A claim of completion is only true when `checklist.md` has no `[ ]` or `[~]` left, and
+  every `[-]` has its reason in `apis.md`. Check that before saying the task is done.
+- Progress goes to the Discord webhook below at least every ten minutes while working:
+  `<https://discord.com/api/webhooks/1560109655575756920/9c8zThZb_FmPeUc4i94GRCSWW0VlvI5j3L5PUNOsg2C_rlVHTihChozaGFaKKhxWuGgQ>`
+  (`curl -H 'content-type: application/json' -d '{"content":"..."}' <url>`), one short
+  message: the section just finished, the one in progress, the commit hash.
+
+### Where I am
+
+- **Last finished:** §4 dependencies and mod load order, ABI v8 — commit `97218d9`, pushed
+  to `dev`. Evidence: `/tmp/opencode/s4-deps.png` plus the run log (a mod with an absent
+  requirement refused before `load`, `order=["core_lib","hello_mod"]`).
+- **In progress:** starting §5 capability system, from a clean tree.
+- **Next command:** read `## 5. Capability system` in the wishlist, then add the
+  capability set to `cinnaloader/sdk/src/capability.rs` with the loader checking it against
+  the host's supported list before load.
+- **Blocked (carried forward):** keybinds cannot be exercised headlessly (`device_query`
+  needs a focused window) and synthetic clicks do not reach the panel, so those stay
+  verified-by-CLI-and-unit-test with the reason recorded in the row.
 
 Session notes live **outside** the repo, at `/home/wak/Cinna/cinnaloader-notes/STATUS.md`.
 That split is deliberate: the repo gets the change and its tests, the notes get everything
