@@ -52,7 +52,7 @@ guide, not a contract.
 | 14 | Game and session state | 33 | done | What the host observes itself: frames, ticks, rates, version, launch address, window, phase, its own two managers, and four recorded requests |
 | 15 | World and dimension APIs | 56 | done | Every name exists and answers honestly: the world half is `None`/`false` with a reason (hooks this host does not have), the dimension half is a real registry mods declare into |
 | 16 | Block APIs | 50 | done | Block types mods declare (properties, hardness, shapes, tool, drops, behaviour) plus every world question refused with a reason |
-| 17 | Item APIs | 47 | todo |
+| 17 | Item APIs | 47 | done | `ItemStack` is a real value here (create/clone/copy/split/merge/count/name/lore/damage/enchants/components); the client's item registry and the hand are refused with reasons. `get_model` is `n/a`: Bedrock draws an icon, not a model graph |
 | 18 | Inventory and containers | 50 | todo |
 | 19 | Entity system | 82 | todo |
 | 20 | Entity components and attributes | 27 | todo |
@@ -284,6 +284,33 @@ Verified in a live client: a lantern declared with two properties, read back wit
 material, hardness, light level, drops and tool requirement, its behaviour reporting
 `["on_use", "on_break"]` while `why_never_called()` explains that nothing here calls them,
 eighteen event kinds registered, and every world question `None` or `false`.
+
+### 17 — Item APIs
+
+An item **stack** is a value this host owns, and that half is real: identifier, count, aux,
+damage, custom name, lore, enchantments and Bedrock item components, with create, clone, copy
+(three names for one operation in the wishlist), split, merge, count, name, lore and damage
+implemented on it, and the free functions the wishlist lists as thin wrappers over those
+methods.
+
+An item **type** a mod declares is real data too — max stack, durability, icon name, tags,
+components, use action and duration, cooldown, and the food/armour/tool component groups —
+and every mod can read that registry. The grouping is Forge's; Bedrock carries the same data
+as components, and the module says so instead of pretending the grouping is Bedrock's.
+`register` logs that the client has not been told, and `is_registered_with_the_client`
+answers honestly that it never has.
+
+What the client owns is refused with a reason: its item registry (`get`, `get_by_id`,
+`get_by_name`, tags, enchantment definitions, icons) and the stack in the player's hand
+(`get_stack`). `get_model` is `n/a` rather than refused: a Bedrock item draws an icon, so
+there is no model graph to return and the Forge model this name comes from has no
+counterpart. The nineteen item event kinds are registered on the section 6 bus so a
+subscription is in place for the day the hooks land.
+
+Verified in a live client: a pickaxe stack with 250 durability worn to 200, named and
+enchanted, split and merged, and a declared lantern read back with its max stack, durability,
+tags, use action, cooldown, icon and the three component groups; the hand, the model and the
+client's registry all `None`.
 
 ## Open: a wild jump on the first frame
 

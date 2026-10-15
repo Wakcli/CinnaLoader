@@ -1065,6 +1065,99 @@ impl Mod for Hello {
             );
         });
 
+        // Section 17: item stacks (real values) and the item registry (the client's).
+        tasks::schedule_after_ticks(18, move || {
+            items::register_event_kinds();
+            let mut stack = items::create_stack("minecraft:iron_pickaxe", 1).with_max_count(1);
+            stack.set_component(items::ItemComponent::new("minecraft:durability", "250"));
+            stack.set_damage(50);
+            stack.set_name("Digger");
+            stack.set_lore(&["made in the example", "still sharp"]);
+            stack.add_enchantment("minecraft:efficiency", 3);
+            info!(
+                "items: stack={stack} count={} damage={:?} durability={:?} max_damage={:?} enchanted={} plain={}",
+                stack.count(),
+                items::get_damage(&stack),
+                stack.durability(),
+                items::get_max_damage(&stack),
+                items::is_enchanted(&stack),
+                stack.is_plain(),
+            );
+            let split = items::split_stack(&mut stack, 1);
+            info!(
+                "items: split={:?} left={} merged={:?}",
+                split.map(|split| split.count()),
+                stack.count(),
+                items::merge_stacks(&mut stack, &items::create_stack("minecraft:iron_pickaxe", 3)),
+            );
+            info!(
+                "items: metadata={} name={:?} display={:?} lore={:?} components={:?}",
+                items::get_metadata(&stack),
+                items::get_name(&stack),
+                items::get_display_name(&stack),
+                items::get_lore(&stack),
+                items::components_of(&stack)
+                    .into_iter()
+                    .map(|component| component.name)
+                    .collect::<Vec<_>>(),
+            );
+            info!(
+                "items: register={} type={:?}",
+                items::register(
+                    ItemType::new("lantern", "Lantern")
+                        .max_count(16)
+                        .durability(64)
+                        .icon("hello:lantern")
+                        .tag("cinnaloader:lights")
+                        .component(items::ItemComponent::custom_name("Lantern"))
+                        .use_action("place", 10)
+                        .cooldown(5)
+                        .food(&[items::ItemComponent::new("minecraft:nutrition", "4")])
+                        .armour(&[items::ItemComponent::new("minecraft:armor_slot", "head")])
+                        .tool(&[items::ItemComponent::new("minecraft:mining_speed", "2")])
+                ),
+                items::get("lantern").map(|item| item.to_string()),
+            );
+            info!(
+                "items: by_name={:?} registry_id={:?} max_stack={:?} durability={:?} damageable={:?} stackable={:?} edible={:?} equippable={:?}",
+                items::get_by_name("Lantern").map(|item| item.name),
+                items::get_registry_id("lantern"),
+                items::get_max_stack_size("lantern"),
+                items::get_durability("lantern"),
+                items::is_damageable("lantern"),
+                items::is_stackable("lantern"),
+                items::is_edible("lantern"),
+                items::is_equippable("lantern"),
+            );
+            info!(
+                "items: tags={:?} has_tag={} use={:?}/{:?} cooldown={:?} texture={:?} food={} armour={} tool={}",
+                items::get_tags("lantern"),
+                items::has_tag("lantern", "cinnaloader:lights"),
+                items::get_use_action("lantern"),
+                items::get_use_duration("lantern"),
+                items::get_cooldown("lantern"),
+                items::get_texture("lantern"),
+                items::get_food_properties("lantern").len(),
+                items::get_armour_properties("lantern").len(),
+                items::get_tool_properties("lantern").len(),
+            );
+            info!(
+                "items: declared_stack={:?} events={} known={}",
+                items::get("lantern").map(|item| item.stack(3).to_string()),
+                items::event_kinds().len(),
+                items::has_event_kind("item_use"),
+            );
+            info!(
+                "items: client-side: hand={:?} model={:?} stone={:?} refusals={:?} registered_with_client={}",
+                items::get_stack(),
+                items::get_model("minecraft:stone"),
+                items::get("minecraft:stone"),
+                items::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                items::is_registered_with_the_client("lantern"),
+            );
+            info!("items: unregister={}", items::unregister("lantern"));
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

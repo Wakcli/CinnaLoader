@@ -54,6 +54,7 @@ pub mod events;
 pub mod fs;
 pub mod game;
 pub mod i18n;
+pub mod items;
 pub mod lifecycle;
 pub mod log;
 pub mod metadata;
@@ -1258,6 +1259,7 @@ pub mod prelude {
     pub use crate::fs::{self as fs, File, FsError, Metadata as FileMetadata, Watch};
     pub use crate::game::{self as game, Request, RequestOutcome, SessionInfo, Window};
     pub use crate::i18n::{self as i18n, Language, NumberStyle};
+    pub use crate::items::{self as items, Component as ItemComponent, ItemStack, ItemType};
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};
     pub use crate::mods;
