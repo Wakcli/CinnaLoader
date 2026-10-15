@@ -207,53 +207,53 @@ are in `AGENTS.md`. Work top to bottom: implement, test, verify in-game, then fl
 - [x] mods::find_cycles()
 ## 5. Capability system
 
-- [ ] capabilities::list()
-- [ ] capabilities::get()
-- [ ] capabilities::has()
-- [ ] capabilities::require()
-- [ ] capabilities::register()
-- [ ] capabilities::unregister()
-- [ ] capabilities::describe()
-- [ ] capabilities::get_version()
-- [ ] capabilities::is_experimental()
-- [ ] capabilities::is_unsafe()
-- [ ] capabilities::get_requirements()
-- [ ] capabilities::check_permissions()
-- [ ] WorldRead
-- [ ] WorldWrite
-- [ ] EntityRead
-- [ ] EntityWrite
-- [ ] BlockRead
-- [ ] BlockWrite
-- [ ] InventoryRead
-- [ ] InventoryWrite
-- [ ] PacketObserve
-- [ ] PacketModify
-- [ ] PacketSend
-- [ ] RawNetworkAccess
-- [ ] CustomRendering
-- [ ] ShaderAccess
-- [ ] TextureRegistration
-- [ ] ModelRegistration
-- [ ] CustomScreens
-- [ ] HudModification
-- [ ] InputInterception
-- [ ] CameraControl
-- [ ] SoundRegistration
-- [ ] CommandRegistration
-- [ ] ResourceReload
-- [ ] FilesystemRead
-- [ ] FilesystemWrite
-- [ ] Reflection
-- [ ] NativeCode
-- [ ] ScriptExecution
-- [ ] WorldGeneration
-- [ ] CustomDimensions
-- [ ] CustomEntities
-- [ ] CustomBlocks
-- [ ] CustomItems
-- [ ] ServerIntegration
-- [ ] ClientIntegration
+- [x] capabilities::list()
+- [x] capabilities::get()
+- [x] capabilities::has()
+- [x] capabilities::require()
+- [x] capabilities::register()
+- [x] capabilities::unregister()
+- [x] capabilities::describe()
+- [x] capabilities::get_version()
+- [x] capabilities::is_experimental()
+- [x] capabilities::is_unsafe()
+- [x] capabilities::get_requirements()
+- [x] capabilities::check_permissions()
+- [x] WorldRead
+- [x] WorldWrite
+- [x] EntityRead
+- [x] EntityWrite
+- [x] BlockRead
+- [x] BlockWrite
+- [x] InventoryRead
+- [x] InventoryWrite
+- [x] PacketObserve
+- [x] PacketModify
+- [x] PacketSend
+- [x] RawNetworkAccess
+- [x] CustomRendering
+- [x] ShaderAccess
+- [x] TextureRegistration
+- [x] ModelRegistration
+- [x] CustomScreens
+- [x] HudModification
+- [x] InputInterception
+- [x] CameraControl
+- [x] SoundRegistration
+- [x] CommandRegistration
+- [x] ResourceReload
+- [x] FilesystemRead
+- [x] FilesystemWrite
+- [x] Reflection
+- [x] NativeCode
+- [x] ScriptExecution
+- [x] WorldGeneration
+- [x] CustomDimensions
+- [x] CustomEntities
+- [x] CustomBlocks
+- [x] CustomItems
+- [x] ServerIntegration
+- [x] ClientIntegration
 
 ## 6. Event system
 

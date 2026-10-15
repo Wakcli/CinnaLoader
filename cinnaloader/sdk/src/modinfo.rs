@@ -25,6 +25,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::deps::{DependencyKind, ModConflict, ModDependency};
+
+pub use crate::capability::Capability;
 use crate::version::{VersionRange, VersionReq};
 
 /// The wire format the SDK and the loader agree on for a manifest.
@@ -124,68 +126,6 @@ impl FromStr for State {
             "loaded" => Ok(Self::Loaded),
             "disabled" => Ok(Self::Disabled),
             "failed" => Ok(Self::Failed),
-            _ => Err(()),
-        }
-    }
-}
-
-/// Something a mod needs the loader to allow. Declared, reported, and enforced by the
-/// capability system as that lands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Capability {
-    /// Read and write under its own directory.
-    Files,
-    /// Open sockets of its own.
-    Network,
-    /// Read local player state.
-    PlayerRead,
-    /// Read world and entity state.
-    WorldRead,
-    /// Draw into the HUD.
-    Render,
-    /// Observe keyboard and mouse beyond its declared keybinds.
-    Input,
-    /// Send or rewrite packets.
-    NetworkIntercept,
-    /// Change the world.
-    WorldWrite,
-}
-
-impl fmt::Display for Capability {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
-impl Capability {
-    /// The name the wire format and the capability system use.
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Files => "files",
-            Self::Network => "network",
-            Self::PlayerRead => "player_read",
-            Self::WorldRead => "world_read",
-            Self::Render => "render",
-            Self::Input => "input",
-            Self::NetworkIntercept => "network_intercept",
-            Self::WorldWrite => "world_write",
-        }
-    }
-}
-
-impl FromStr for Capability {
-    type Err = ();
-    fn from_str(text: &str) -> Result<Self, ()> {
-        match text {
-            "files" => Ok(Self::Files),
-            "network" => Ok(Self::Network),
-            "player_read" => Ok(Self::PlayerRead),
-            "world_read" => Ok(Self::WorldRead),
-            "render" => Ok(Self::Render),
-            "input" => Ok(Self::Input),
-            "network_intercept" => Ok(Self::NetworkIntercept),
-            "world_write" => Ok(Self::WorldWrite),
             _ => Err(()),
         }
     }
@@ -1351,7 +1291,7 @@ mod tests {
             .category("Movement")
             .environment(Environment::Client)
             .capability(Capability::PlayerRead)
-            .capability(Capability::Files)
+            .capability(Capability::FilesystemRead)
             .permission(Permission::WorldState)
             .build(BuildInfo {
                 number: Some(42),

@@ -285,8 +285,15 @@ fn record_resolution(order: Vec<String>, problems: Vec<String>, cycles: Vec<Vec<
     }
 }
 
-/// What this loader can provide, so a mod can ask before offering a feature.
-const LOADER_FEATURES: [&str; 4] = ["files", "player_read", "render", "input"];
+/// What this loader can provide, so a mod can ask before offering a feature: one name per
+/// capability this client can really be given.
+fn loader_features() -> Vec<&'static str> {
+    cinnaloader::capability::ALL
+        .iter()
+        .filter(|capability| capability.is_supported())
+        .map(|capability| capability.as_str())
+        .collect()
+}
 
 /// The game and process facts every mod sees. The preload fills in what it can read from
 /// the client; the rest are derived here.
@@ -311,7 +318,7 @@ pub fn host_facts() -> HostFacts {
             game_protocol: None,
             api_version: cinnaloader::ABI_VERSION,
             loader_version: LOADER_VERSION.to_owned(),
-            features: LOADER_FEATURES.iter().map(|name| (*name).to_owned()).collect(),
+            features: loader_features().into_iter().map(str::to_owned).collect(),
         })
 }
 
@@ -557,6 +564,16 @@ unsafe extern "C" fn host_graph(out: *mut c_char, capacity: usize) -> i32 {
         for id in &record.manifest.provides {
             text.push_str(&format!("provides={}|{id}\n", record.name));
         }
+        for capability in &record.manifest.capabilities {
+            text.push_str(&format!("modcap={}|{}\n", record.name, capability.as_str()));
+        }
+    }
+    for capability in cinnaloader::capability::ALL {
+        text.push_str(&format!(
+            "capability={}|{}\n",
+            capability.as_str(),
+            u8::from(capability.is_supported())
+        ));
     }
     for (index, name) in last_order().iter().enumerate() {
         text.push_str(&format!("order={name}|{index}\n"));
@@ -1434,6 +1451,7 @@ mod tests {
 
     #[test]
     fn a_directory_without_mods_is_empty_not_an_error() {
+        let _serial = serial();
         let dir = std::env::temp_dir().join(format!("cinnaloader-empty-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let host = Host::load_dir(&dir).unwrap();
@@ -1643,6 +1661,37 @@ mod tests {
         assert!(seen[0].starts_with("key\t"));
         assert!(seen[0].ends_with("\t1"));
         assert!(seen[1].ends_with("\t0"));
+    }
+
+    #[test]
+    fn the_capability_table_the_loader_writes_is_what_the_sdk_answers_with() {
+        let _serial = serial();
+        remember(
+            "core_lib",
+            ModManifest::new("core_lib", "Core", "1.2")
+                .capability(cinnaloader::capability::Capability::Render),
+            None,
+        );
+        let dir = CString::new("/tmp").unwrap();
+        let name = CString::new("core_lib").unwrap();
+        let api = host_api(dir.as_ptr(), name.as_ptr());
+        // SAFETY: the table outlives the calls below and every slot is a loader callback.
+        assert_eq!(unsafe { cinnaloader::install(&api) }, 0);
+
+        use cinnaloader::capability::{self as capabilities, Capability as Cap};
+        assert!(capabilities::supported(Cap::Render));
+        assert!(capabilities::supported(Cap::FilesystemRead));
+        assert!(!capabilities::supported(Cap::WorldWrite));
+        assert_eq!(
+            capabilities::why_unsupported(Cap::WorldWrite),
+            "needs hooks into the client's world and entity state"
+        );
+        assert_eq!(
+            cinnaloader::mods::capabilities_of("core_lib"),
+            vec!["render".to_owned()]
+        );
+        assert_eq!(capabilities::provided_by_id(Cap::Render), vec!["core_lib"]);
+        assert_eq!(capabilities::list().len(), 38);
     }
 
     #[test]

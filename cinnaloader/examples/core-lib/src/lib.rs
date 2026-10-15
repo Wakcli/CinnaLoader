@@ -30,5 +30,7 @@ export_mod!(Core, manifest = ModManifest::new("core_lib", "Core library", env!("
     .license("MIT")
     .tag("example")
     .provides("core_lib")
+    .capability(Capability::FilesystemRead)
+    .permission(Permission::ReadFiles)
     .requires_api(8)
     .requires_loader(">=0.1, <1"));

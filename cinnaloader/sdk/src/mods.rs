@@ -52,6 +52,10 @@ pub struct Registry {
     pub dependencies: Vec<(String, ModDependency)>,
     /// `(mod, id it provides)` pairs.
     pub provides: Vec<(String, String)>,
+    /// `(mod, capability it declared)` pairs.
+    pub capabilities: Vec<(String, String)>,
+    /// `(capability, whether the host can provide it)` pairs.
+    pub host_capabilities: Vec<(String, bool)>,
     pub errors: Vec<String>,
     pub missing: Vec<String>,
     pub conflicts: Vec<String>,
@@ -113,6 +117,16 @@ pub fn registry() -> Registry {
                 registry
                     .provides
                     .push((fields[0].to_owned(), fields[1].to_owned()));
+            }
+            "modcap" if fields.len() >= 2 => {
+                registry
+                    .capabilities
+                    .push((fields[0].to_owned(), fields[1].to_owned()));
+            }
+            "capability" if fields.len() >= 2 => {
+                registry
+                    .host_capabilities
+                    .push((fields[0].to_owned(), fields[1] == "1"));
             }
             "error" => registry.errors.push(value.to_owned()),
             "missing" => registry.missing.push(value.replace('|', ": ")),
@@ -247,6 +261,24 @@ pub fn get_dependents(id: &str) -> Vec<String> {
 #[must_use]
 pub fn get_load_order() -> Vec<String> {
     registry().order
+}
+
+/// The capabilities a mod declared, by loader name or id.
+#[must_use]
+pub fn capabilities_of(name: &str) -> Vec<String> {
+    let registry = registry();
+    let id = registry
+        .mods
+        .iter()
+        .find(|entry| entry.name == name || entry.id == name)
+        .map(|entry| entry.name.clone())
+        .unwrap_or_else(|| name.to_owned());
+    registry
+        .capabilities
+        .into_iter()
+        .filter(|(owner, _)| owner == &id)
+        .map(|(_, capability)| capability)
+        .collect()
 }
 
 /// One line per mod, saying what it had to wait for.

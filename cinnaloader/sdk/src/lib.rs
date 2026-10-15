@@ -44,6 +44,7 @@ use std::{
     sync::OnceLock,
 };
 
+pub mod capability;
 pub mod compat;
 pub mod deps;
 pub mod lifecycle;
@@ -60,6 +61,9 @@ pub const ABI_VERSION: u32 = 8;
 
 /// Readable spelling for a toggle's `default`.
 pub const ON: bool = true;
+/// The capability system, under the name the wishlist uses.
+pub use capability as capabilities;
+
 /// Readable spelling for a toggle's `default`.
 pub const OFF: bool = false;
 
@@ -1133,7 +1137,8 @@ macro_rules! export_mod {
 /// Everything a mod needs: `use cinnaloader::prelude::*;`
 pub mod prelude {
     pub use crate::metadata::{
-        authors, build_number, build_timestamp, cache_directory, capabilities, category,
+        authors, build_number, build_timestamp, cache_directory, category,
+        declared_capabilities,
         config_directory, context, contributors, credits, data_directory, declare, declared,
         description,
         directory, entrypoint, environment, git_commit, icon, id, instance, is_development,
@@ -1141,6 +1146,7 @@ pub mod prelude {
         name, namespace, permissions, plugin_directory, resource_directory, source_url, state,
         tags, version, website,
     };
+    pub use crate::capability::{self as capabilities, Capability};
     pub use crate::compat;
     pub use crate::deps::{
         CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
@@ -1153,7 +1159,7 @@ pub mod prelude {
         previous_version, register_cleanup, register_shutdown_handler, Phase,
     };
     pub use crate::modinfo::{
-        BuildInfo, Capability, Environment, ModContext, ModDirectory, ModInfo, ModInstance,
+        BuildInfo, Environment, ModContext, ModDirectory, ModInfo, ModInstance,
         ModManifest, ModMetadata, ModNamespace, ModVersion, Permission, State,
     };
     pub use crate::version::{

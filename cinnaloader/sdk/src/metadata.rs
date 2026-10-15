@@ -49,8 +49,9 @@ pub fn declared() -> Option<ModManifest> {
     held_manifest()
 }
 
-/// Tells the loader who this mod is. Call it first in [`Mod::load`](crate::Mod::load);
-/// a second call in the same mod is ignored.
+/// Tells the loader who this mod is. Call it first in [`Mod::load`](crate::Mod::load); a
+/// later call amends what is already there, which is how the capability system adds to a
+/// manifest after `load` has started.
 ///
 /// ```
 /// # use cinnaloader::prelude::*;
@@ -66,14 +67,26 @@ pub fn declare(manifest: ModManifest) -> bool {
         Some(base) => base.amended_with(&manifest),
         None => manifest,
     };
-    if !crate::install_manifest(&manifest) {
-        return false;
-    }
+    // The loader is told, unless there is none: a unit test, or a call before the host
+    // exists. What the mod declared is recorded either way, so the accessors below never
+    // contradict the declaration.
+    let told = crate::install_manifest(&manifest);
     // A version change since the last run means the mod's own data may need moving; the
     // loader is told, and `Mod::migrate` follows `load`.
     crate::note_declaration(&manifest);
     set_manifest(manifest);
-    true
+    told
+}
+
+/// Changes what this mod declared, without the union [`declare`] applies, and tells the
+/// loader. Used by the capability system, which has to be able to take something back.
+#[doc(hidden)]
+pub fn amend(change: impl FnOnce(&mut ModManifest)) -> bool {
+    let mut manifest = manifest();
+    change(&mut manifest);
+    let told = crate::install_manifest(&manifest);
+    set_manifest(manifest);
+    told
 }
 
 /// What this mod declared, or an empty manifest if it has not declared yet.
@@ -113,9 +126,10 @@ pub fn metadata() -> ModMetadata {
     report()
 }
 
-/// What this mod needs the loader to allow. See [`crate::info::Capability`].
+/// The capabilities this mod declared. See [`crate::capability`] for what can be asked of
+/// them, and [`crate::capability::has`] for whether one is held.
 #[must_use]
-pub fn capabilities() -> Vec<Capability> {
+pub fn declared_capabilities() -> Vec<Capability> {
     manifest().capabilities
 }
 

@@ -61,10 +61,10 @@ impl Mod for Hello {
             namespace().scope("watermark"),
         );
         info!(
-            "manifest v{} | tags {:?} | capabilities {} | loader v{} | abi {}",
+            "manifest v{} | tags {:?} | declared capabilities {} | loader v{} | abi {}",
             manifest_version(),
             tags(),
-            capabilities().len(),
+            declared_capabilities().len(),
             loader_version(),
             compat::api(),
         );
@@ -100,6 +100,36 @@ impl Mod for Hello {
             set_config("name", "hello-mod");
         }
         info!("hello-mod initialised (mods from {})", mods_dir().unwrap_or("?"));
+        // Section 5: what this mod holds, what it does not, and why.
+        info!(
+            "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",
+            capabilities::list().len(),
+            capabilities::list()
+                .into_iter()
+                .filter(|capability| capabilities::has(*capability))
+                .collect::<Vec<_>>(),
+            capabilities::has(Capability::Render),
+            capabilities::has(Capability::WorldRead),
+            capabilities::why_unsupported(Capability::WorldWrite),
+        );
+        info!(
+            "capabilities: describe(render)={:?} v{} experimental(shader)={} unsafe(filesystem_write)={} requirements={:?}",
+            capabilities::describe(Capability::Render),
+            capabilities::get_version(Capability::Render),
+            capabilities::is_experimental(Capability::ShaderAccess),
+            capabilities::is_unsafe(Capability::FilesystemWrite),
+            capabilities::get_requirements(Capability::FilesystemWrite),
+        );
+        info!(
+            "capabilities: get(world_write)={:?} get(nonsense)={:?} permissions_missing={:?} providers(filesystem_read)={:?}",
+            capabilities::get("world_write"),
+            capabilities::get("nonsense"),
+            capabilities::check_permissions(),
+            capabilities::provided_by_id(Capability::FilesystemRead),
+        );
+        if capabilities::require(Capability::WorldRead) {
+            info!("capabilities: world_read granted");
+        }
         // Section 4: who else is loaded, what needs what, and the order the loader chose.
         info!(
             "deps: order={:?} mine={:?} core_loaded={} core_enabled={} dependents={:?}",
@@ -145,6 +175,11 @@ impl Mod for Hello {
     }
 
     fn initialize(&mut self) {
+        info!(
+            "capabilities: register(command_registration)={} held={}",
+            capabilities::register(Capability::CommandRegistration),
+            capabilities::has(Capability::CommandRegistration),
+        );
         info!("lifecycle: initialize (phase {})", current_phase());
     }
 
@@ -213,7 +248,14 @@ export_mod!(Hello, manifest = ModManifest::new("hello_mod", "Hello mod", env!("C
     .description("The worked example: one of every setting kind")
     .author("cinnaloader")
     .tag("example")
-    .capability(Capability::Files)
+    .capability(Capability::FilesystemRead)
+    .capability(Capability::FilesystemWrite)
+    .capability(Capability::Render)
+    .capability(Capability::PlayerRead)
+    .permission(Permission::ReadFiles)
+    .permission(Permission::WriteFiles)
+    .permission(Permission::Render)
+    .permission(Permission::PlayerState)
     .permission(Permission::WorldState)
     .depends_on_versioned("core_lib", ">=0.1")
     .load_after("core_lib")

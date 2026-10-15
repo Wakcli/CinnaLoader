@@ -135,12 +135,11 @@ pub fn loader_capabilities() -> Vec<Capability> {
     let facts = crate::host_facts();
     if facts.features.is_empty() {
         // No loader answered; report what this SDK's loader provides.
-        return vec![
-            Capability::Files,
-            Capability::PlayerRead,
-            Capability::Render,
-            Capability::Input,
-        ];
+        return crate::capability::ALL
+            .iter()
+            .copied()
+            .filter(|capability| capability.is_supported())
+            .collect();
     }
     facts
         .features
@@ -320,7 +319,8 @@ mod tests {
     #[test]
     fn capabilities_are_reported_as_features() {
         assert!(is_feature_available("files"));
-        assert!(is_feature_available("player_read"));
+        assert!(is_feature_available("filesystem_read"));
+        assert!(!is_feature_available("player_read"));
         assert!(!is_feature_available("world_write"));
         assert!(!is_feature_available("oscilloscope"));
         assert_eq!(availability("files"), FeatureAvailability::Available);
@@ -353,8 +353,8 @@ mod tests {
         assert!(require_api_version(1).is_ok());
         let error = require_platform("nintendo-switch").unwrap_err();
         assert!(error.contains("nintendo-switch"), "{error}");
-        let error = require_capability(Capability::NetworkIntercept).unwrap_err();
-        assert!(error.contains("network_intercept"), "{error}");
+        let error = require_capability(Capability::PacketModify).unwrap_err();
+        assert!(error.contains("packet_modify"), "{error}");
         // With no loader answering, the version is unknown and cannot satisfy `>=`.
         let error = require_loader_version(&VersionReq::parse(">=0.0.1").unwrap()).unwrap_err();
         assert!(error.contains("needs loader"), "{error}");
