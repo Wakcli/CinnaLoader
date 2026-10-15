@@ -4614,6 +4614,384 @@ impl Mod for Hello {
             );
         });
 
+        // Section 50: a decision layer a mod really runs, and the client's own AI.
+        tasks::schedule_after_ticks(82, move || {
+            if !demo(50) {
+                return;
+            }
+            info!(
+                "ai: register={} {} add={} {} goals={:?}",
+                ai::register_goal(Goal::new("hello:wander", 5)),
+                ai::register_goal(
+                    Goal::new("hello:attack", 1)
+                        .condition("hello:has_target")
+                        .filter(
+                            TargetFilter::new(16.0)
+                                .deny("minecraft:sheep")
+                                .line_of_sight(true)
+                        )
+                ),
+                ai::add_goal("hello:mob", {
+                    let hunting = Goal::new("hello:attack", 1)
+                        .condition("hello:has_target")
+                        .filter(
+                            TargetFilter::new(16.0)
+                                .deny("minecraft:sheep")
+                                .line_of_sight(true),
+                        );
+                    ai::register_goal(hunting.clone());
+                    hunting
+                }),
+                ai::add_goal("hello:mob", Goal::new("hello:wander", 5)),
+                ai::get_goals("hello:mob")
+                    .iter()
+                    .map(|goal| (goal.name.clone(), goal.priority))
+                    .collect::<Vec<_>>(),
+            );
+            let candidates = vec![
+                Candidate::new("far", "minecraft:zombie", (10.0, 0.0, 0.0)),
+                Candidate::new("near", "minecraft:sheep", (2.0, 0.0, 0.0)),
+                Candidate::new("nearer", "minecraft:zombie", (3.0, 0.0, 0.0)),
+            ];
+            let filter = TargetFilter::new(16.0)
+                .deny("minecraft:sheep")
+                .line_of_sight(true);
+            info!(
+                "ai: chosen={:?} unfiltered={:?} selection={:?}",
+                ai::select_target((0.0, 0.0, 0.0), &candidates, &filter)
+                    .map(|held| held.id.clone()),
+                ai::select_target((0.0, 0.0, 0.0), &candidates, &TargetFilter::new(16.0))
+                    .map(|held| held.id.clone()),
+                {
+                    let selection = ai::select_goal(
+                        &ai::get_goals("hello:mob"),
+                        (0.0, 0.0, 0.0),
+                        &candidates,
+                        &["hello:has_target".to_owned()],
+                    );
+                    (selection.goal, selection.target.map(|held| held.id), selection.skipped.len())
+                },
+            );
+            let path = ai::Path::new(vec![
+                (0.0, 0.0, 0.0),
+                (3.0, 0.0, 0.0),
+                (3.0, 4.0, 0.0),
+            ]);
+            info!(
+                "ai: path_len={} end={:?} reachable={} empty={}",
+                path.length(),
+                path.end(),
+                path.is_reachable(8.0),
+                ai::Path::new(Vec::new()).is_empty(),
+            );
+            let mut navigator = ai::Navigator::at((0.0, 0.0, 0.0), path, 2.0);
+            let step = navigator.step(1.0);
+            info!(
+                "ai: step_to={:?} moved={} advanced={} finished={} stuck={} reach={}",
+                step.to,
+                step.moved,
+                step.advanced,
+                step.finished,
+                navigator.is_stuck(),
+                navigator.can_reach((3.0, 0.0, 0.0), 4.0),
+            );
+            let mut detector = ai::StuckDetector::new(3, 0.5);
+            detector.record(0.1);
+            detector.record(0.2);
+            let quiet = detector.is_stuck();
+            detector.record(2.0);
+            info!(
+                "ai: detector_quiet={quiet} detector_after={} reset={}",
+                detector.is_stuck(),
+                {
+                    detector.reset();
+                    detector.is_stuck()
+                },
+            );
+            let target = ai::MobTarget::new("hello:prey", "minecraft:pig", (5.0, 0.0, 0.0))
+                .with_cooldown(3);
+            info!(
+                "ai: target={} expired={} tick3={} expired_now={} memories={} lossy={}",
+                ai::set_target("hello:mob", target.clone()),
+                target.is_expired(),
+                {
+                    let mut ticking = target.clone();
+                    ticking.tick(3)
+                },
+                {
+                    let mut ticking = target.clone();
+                    ticking.tick(3);
+                    ticking.is_expired()
+                },
+                ai::get_memories("hello:mob").len(),
+                ai::set_memory("hello:mob", "hello:lair", "somewhere"),
+            );
+            let behaviour = ai::Behaviour::new("hello:guard", "idle")
+                .transition("idle", "saw_enemy", "chase");
+            let mut started = match ai::StateMachine::start(&behaviour) {
+                Some(machine) => machine,
+                None => return,
+            };
+            let fired = started.fire(&behaviour, "saw_enemy");
+            info!(
+                "ai: next={:?} fired={} after={:?} schedule={} memory={:?}",
+                behaviour.next_state("idle", "saw_enemy"),
+                fired,
+                started.current,
+                ai::register_schedule(ai::Schedule::new("hello:day")),
+                ai::get_memory("hello:mob", "hello:lair"),
+            );
+            info!(
+                "ai: client-side: brain={:?} nav={:?} senses={} see={} hear={} nearby={} provider={} refusals={:?}",
+                ai::get_brain(),
+                ai::get_navigation(),
+                ai::get_senses().len(),
+                ai::can_see("hello:mob", "hello:prey"),
+                ai::can_hear("hello:mob", "hello:prey"),
+                ai::get_nearby_entities((0.0, 0.0, 0.0), 16.0).len(),
+                ai::register_brain_provider("hello:brain"),
+                ai::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
+        // Section 51: a redstone signal solver a mod really runs.
+        tasks::schedule_after_ticks(84, move || {
+            if !demo(51) {
+                return;
+            }
+            let network = redstone::SignalNetwork::new()
+                .source(redstone::SignalSource::new("hello:lever", "Lever", (0, 0, 0)).strength(15))
+                .consumer(redstone::SignalConsumer::new("hello:lamp", "Lamp", (4, 0, 0)))
+                .push(redstone::Component::wire("hello:wire1", "Wire", (1, 0, 0)))
+                .push(redstone::Component::wire("hello:wire2", "Wire", (2, 0, 0)))
+                .push(redstone::Component::wire("hello:wire3", "Wire", (3, 0, 0)));
+            let graph = network.solve();
+            info!(
+                "redstone: power=[{} {} {} {}] own_signal={} lamp_powered={} lamp_signal={}",
+                graph.power_at((1, 0, 0)).get(),
+                graph.power_at((2, 0, 0)).get(),
+                graph.power_at((3, 0, 0)).get(),
+                graph.power_at((4, 0, 0)).get(),
+                graph.signal_at((1, 0, 0)).get(),
+                graph.is_powered_at((4, 0, 0)),
+                graph.receiver_power("hello:lamp").map(|held| held.get()).unwrap_or(0),
+            );
+            let ring = redstone::SignalNetwork::new()
+                .source(redstone::SignalSource::new("hello:r0", "R", (0, 0, 0)).strength(15))
+                .push(redstone::Component::wire("hello:r1", "W", (1, 0, 0)))
+                .push(redstone::Component::wire("hello:r2", "W", (1, 0, 1)))
+                .push(redstone::Component::wire("hello:r3", "W", (0, 0, 1)))
+                .solve();
+            info!(
+                "redstone: ring_power=[{} {} {} {}] terminates=true total={} average={}",
+                ring.power_at((0, 0, 0)).get(),
+                ring.power_at((1, 0, 0)).get(),
+                ring.power_at((1, 0, 1)).get(),
+                ring.power_at((0, 0, 1)).get(),
+                ring.total_power(),
+                ring.average_power(),
+            );
+            let sum = redstone::SignalNetwork::new()
+                .source(redstone::SignalSource::new("hello:s1", "S", (0, 0, 0)).strength(15))
+                .source(redstone::SignalSource::new("hello:s2", "S", (2, 0, 0)).strength(15))
+                .consumer(redstone::SignalConsumer::new("hello:both", "Lamp", (1, 0, 0)))
+                .solve();
+            info!(
+                "redstone: max_not_sum={} clamped_low={} clamped_high={} decayed={} offset={}",
+                sum.receiver_power("hello:both").map(|held| held.get()).unwrap_or(0),
+                redstone::Signal::new(-5).get(),
+                redstone::Signal::new(99).get(),
+                redstone::Signal::new(15).decayed(3).get(),
+                redstone::Signal::new(4).offset(-10).get(),
+            );
+            info!(
+                "redstone: register source={} consumer={} wire={} modifier={} comparator={}",
+                redstone::register_signal_source(
+                    redstone::SignalSource::new("hello:button", "Button", (8, 0, 0)).strength(15)
+                ),
+                redstone::register_signal_consumer(
+                    redstone::SignalConsumer::new("hello:door", "Door", (9, 0, 0))
+                ),
+                redstone::register_component(redstone::Component::block(
+                    "hello:repeater",
+                    "Repeater",
+                    (10, 0, 0),
+                    "minecraft:repeater"
+                )),
+                redstone::register_signal_modifier(
+                    redstone::SignalModifier::new("hello:boost", "Boost", (11, 0, 0))
+                        .adjustment(2)
+                ),
+                redstone::register_comparator_behavior(redstone::ComparatorBehavior::new(
+                    "hello:sub",
+                    "Subtract",
+                    redstone::ComparatorMode::Subtract
+                )),
+            );
+            info!(
+                "redstone: names source={} consumer={} schedule={} pending={} drained={:?} neighbors={}",
+                redstone::get_signal_source("hello:button").is_some(),
+                redstone::get_signal_consumer("hello:door").is_some(),
+                redstone::schedule_update(1, 0, 0),
+                redstone::pending_updates().len(),
+                redstone::drain_updates(),
+                redstone::notify_neighbors(1, 0, 0),
+            );
+            info!(
+                "redstone: settled_pending={} again={:?} invalidate={} solve_pending={}",
+                redstone::pending_updates().len(),
+                {
+                    redstone::schedule_update(2, 0, 0);
+                    redstone::drain_updates()
+                },
+                redstone::invalidate_cache(),
+                redstone::solve(&network).total_power(),
+            );
+            info!(
+                "redstone: client-side: signal={:?} direct={:?} power={:?} powered={} neighbors={:?} direction={:?}",
+                redstone::get_signal(1, 0, 0),
+                redstone::get_direct_signal(1, 0, 0),
+                redstone::get_power(1, 0, 0),
+                redstone::is_powered(1, 0, 0),
+                redstone::get_neighbors(1, 0, 0),
+                redstone::get_signal_direction(1, 0, 0),
+            );
+            info!(
+                "redstone: client-side: set={} queue={:?} refusals={:?}",
+                redstone::known_only_to_the_client::set_signal(1, 0, 0, 15),
+                redstone::known_only_to_the_client::get_update_queue(),
+                redstone::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
+        // Section 52: a fluid simulation a mod really runs.
+        tasks::schedule_after_ticks(86, move || {
+            if !demo(52) {
+                return;
+            }
+            info!(
+                "fluids: defaults={} register_brine={} by_name={} lava={}",
+                fluids::register_defaults(),
+                fluids::register(
+                    fluids::Fluid::new("hello:brine", "Brine")
+                        .viscosity(1.0)
+                        .density(1.2)
+                        .temperature(20.0)
+                        .buoyancy(0.0)
+                        .liquid(true)
+                        .max_level(8)
+                        .block("minecraft:water")
+                ),
+                fluids::get_by_name("Water").is_some(),
+                fluids::get_fluid("lava").is_some(),
+            );
+            info!(
+                "fluids: viscosity={:?} density={:?} temperature={:?} buoyancy={:?} liquid={} max_level={:?}",
+                fluids::get_viscosity("water"),
+                fluids::get_density("lava"),
+                fluids::get_temperature("lava"),
+                fluids::get_buoyancy("lava"),
+                fluids::get_fluid("water").map(|held| held.liquid).unwrap_or(false),
+                fluids::get_max_level("water"),
+            );
+            let mut shallow = fluids::FluidGrid::new(1, 2, 1);
+            let shallow_set = shallow.set(0, 1, 0, fluids::FluidCell::source("water"));
+            let shallow_report = shallow.flow();
+            let mut deep = fluids::FluidGrid::new(1, 3, 1);
+            let deep_set = deep.set(0, 2, 0, fluids::FluidCell::source("water"));
+            let deep_report = deep.flow();
+            info!(
+                "fluids: drain_2_tall set={} changed={} cells={} below={:?} kept={} | drain_3_tall set={} changed={} cells={} below={:?} kept={}",
+                shallow_set,
+                shallow_report.changed,
+                shallow_report.cells,
+                shallow.level_at(0, 0, 0),
+                shallow.is_source_at(0, 1, 0),
+                deep_set,
+                deep_report.changed,
+                deep_report.cells,
+                deep.level_at(0, 1, 0),
+                deep.is_source_at(0, 2, 0),
+            );
+            let mut grid = fluids::FluidGrid::new(12, 3, 3);
+            grid.set(0, 0, 0, fluids::FluidCell::source("water"));
+            let steps = grid.run_until_stable(500);
+            info!(
+                "fluids: settled_at={} level1={:?} level8={:?} beyond8={:?} stable_again={}",
+                steps,
+                grid.level_at(1, 0, 0),
+                grid.level_at(8, 0, 0),
+                grid.level_at(9, 0, 0),
+                {
+                    let after = grid.flow();
+                    !after.changed && after.cells == 0
+                },
+            );
+            info!(
+                "fluids: volume={} touching={:?} flowing={} source_at={} empty={}",
+                grid.total_volume(),
+                grid.touching(1, 0, 0).len(),
+                grid.is_flowing_at(1, 0, 0),
+                grid.is_source_at(0, 0, 0),
+                fluids::FluidCell::empty().is_empty(),
+            );
+            let mut region = fluids::FluidGrid::new(4, 4, 4);
+            info!(
+                "fluids: fill={} volume={} fluid_at={:?} level_at={:?}",
+                region.fill(0, 0, 0, (2, 2, 2), fluids::FluidCell::source("water")),
+                region.total_volume(),
+                region.fluid_at(1, 1, 1),
+                region.level_at(0, 0, 0),
+            );
+            let mut slow = fluids::FluidGrid::new(6, 3, 3);
+            slow.set(0, 0, 0, fluids::FluidCell::source("lava"));
+            slow.flow();
+            let lava_tick1 = slow.level_at(1, 0, 0);
+            for _ in 0..10 {
+                slow.flow();
+            }
+            info!(
+                "fluids: lava_tick1={:?} lava_after={:?} water_tick1={:?}",
+                lava_tick1,
+                slow.level_at(1, 0, 0),
+                {
+                    let mut water = fluids::FluidGrid::new(6, 3, 3);
+                    water.set(0, 0, 0, fluids::FluidCell::source("water"));
+                    water.flow();
+                    water.level_at(1, 0, 0)
+                },
+            );
+            info!(
+                "fluids: interaction={} behaviour={} tick={} bucket={} rule={:?} fluid={:?}",
+                fluids::register_interaction("minecraft:water", "minecraft:lava", "minecraft:stone"),
+                fluids::register_behavior("water", fluids::FluidBehaviour::default()),
+                fluids::register_tick_handler("water"),
+                fluids::register_bucket("water", "minecraft:water_bucket"),
+                {
+                    let mut water = fluids::FluidGrid::new(1, 3, 1);
+                    water.set(0, 2, 0, fluids::FluidCell::source("water"));
+                    water.flow();
+                    water.get(0, 1, 0)
+                },
+                {
+                    let mut lava = fluids::FluidGrid::new(1, 3, 1);
+                    lava.set(0, 2, 0, fluids::FluidCell::source("lava"));
+                    lava.flow();
+                    lava.get(0, 1, 0)
+                },
+            );
+            info!(
+                "fluids: client-side: get={:?} state={:?} height={:?} velocity={:?} neighbors={:?} layer={} refusals={:?}",
+                fluids::get(),
+                fluids::get_state(1, 0, 0),
+                fluids::get_height(1, 0, 0),
+                fluids::get_velocity(1, 0, 0),
+                fluids::get_neighbors(1, 0, 0),
+                fluids::register_render_layer("water", "hello:water_layer"),
+                fluids::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

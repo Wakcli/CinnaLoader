@@ -1376,6 +1376,19 @@ pub mod prelude {
     pub use crate::player::{
         self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics,
     };
+    pub use crate::ai::{
+        self as ai, Behaviour, Candidate, Goal, GoalSelection, MemoryType, MobTarget, NavStep,
+        Navigator, Path, Schedule, Sensor, StateMachine, StuckDetector, TargetFilter, Transition,
+    };
+    pub use crate::fluids::{
+        self as fluids, FlowReport, Fluid, FluidBehaviour, FluidCell, FluidGrid, FluidInteraction,
+        InteractionRule,
+    };
+    pub use crate::redstone::{
+        self as redstone, ComparatorBehavior, ComparatorMode, Component as SignalComponent,
+        Signal, SignalConsumer, SignalGraph, SignalKind, SignalModifier, SignalNetwork,
+        SignalNode, SignalSource, WireBehavior,
+    };
     pub use crate::audio::{
         self as audio, Attenuation, Bus, BusHandle, Listener, PlaybackHandle, PlaybackState,
         Sound, SoundCategory, SoundPlayback, Source, SourceHandle,

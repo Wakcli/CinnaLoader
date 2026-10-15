@@ -85,9 +85,9 @@ guide, not a contract.
 | 47 | Scoreboards, teams, and statistics | 41 | done | Real bookkeeping: objectives with criteria and slots, signed scores with exact arithmetic and a defined sort, teams whose membership moves instead of duplicating, and statistic counters clamped at zero with a real export/import; the client's board, sidebar and stats refused |
 | 48 | Enchantments, attributes, and equipment | 30 | done | Real rules: an enchantment cost curve exact at levels 1/3/5, a compatibility check and anvil combine, apply/remove on an item stack, attribute modifiers applied add-then-multiply then clamped, and durability that breaks at zero; the client's table and gear refused |
 | 49 | Loot tables and drops | 23 | done | A real seeded generator: tables, pools with roll ranges, weighted entries, count ranges, gating conditions, functions and modifiers, with the same seed reproducing exactly and the weighting showing in 200 rolls; the client's tables and the server's roll refused |
-| 50 | AI and mob behavior | 34 | todo |
-| 51 | Redstone and block signals | 18 | todo |
-| 52 | Fluids | 21 | todo |
+| 50 | AI and mob behavior | 34 | done | A real decision layer: priority-ordered goals, nearest-target selection with filters and a tie-break, a `select_goal` that names the running goal and why each other was skipped, a navigator stepping `speed × dt` with a stuck detector, target cooldowns and memory; the client's brain, navigator and senses refused |
+| 51 | Redstone and block signals | 18 | done | A real signal solver: one level of decay per step (14, 13, 12, 11), a receiver taking the maximum of two paths rather than their sum, rings that terminate, signal-versus-power as a first-class distinction and a real update queue; the client's redstone refused |
+| 52 | Fluids | 22 | done | A real cellular simulation on a grid a mod owns: a source draining downward, levels dropping one per step and stopping at 8, viscosity making lava lag water, a fixed point after 9 steps and a real region volume; the client's fluid state refused |
 | 53 | Villagers, trading, breeding, and farming | 31 | todo |
 | 54 | Structures and block entities | 34 | todo |
 | 55 | Data formats and serialization | 25 | todo |
@@ -1027,6 +1027,62 @@ table.
 
 Refused with a sentence each: the client's loot tables, the server's roll, the client's drop rules,
 and rolling against the client's world.
+
+### 50 — AI and mob behavior
+
+The decision layer, and it really decides. Goals live in a per-entity list ordered by priority with
+a stable tie-break (`[("hello:attack", 1), ("hello:wander", 5)]`). `select_target` picks the
+nearest candidate that passes the goal's filter — with a filter denying sheep and requiring
+line of sight it chose the zombie at 3 units while the unfiltered call chose the sheep at 2 —
+and `select_goal` names the running goal *and* its target plus how many others it skipped
+(`(Some("hello:attack"), Some("nearer"), 1)`). A path folds its length exactly (3 + 4 = 7),
+`Navigator::step` moves `speed × dt` (2.0 at speed 2.0 for one second) and advances the waypoint
+only on arrival, `StuckDetector` answers on its window (two small steps then a large one is not
+stuck), a target's cooldown expires after exactly the ticks it was given, memory round trips, and
+a state machine transitions (`idle` + `saw_enemy` → `chase`).
+
+Refused with a sentence each: the client's brain and current goal, its navigator and path, its
+senses, seeing/hearing/nearby entities, and the provider/step hooks that would sit inside its AI.
+
+### 51 — Redstone and block signals
+
+A real solver, and the numbers are the point: a source at strength 15 gives `power=[14 13 12 11]`
+along four steps of wire — one level per step, exactly — while the wire's own *signal* is 0, which
+is the module's signal-versus-power distinction made visible. A receiver fed from two sides gets
+14, the maximum of the two paths and not their sum of 28. A ring of four wires settles rather than
+spinning. `Signal::new` clamps at both ends (`-5` → 0, `99` → 15), `decayed(3)` takes 15 to 12 and
+`offset(-10)` takes 4 to 0. The update queue is real: scheduling a position leaves one pending and
+draining answers exactly that position; a change that reaches nothing queues nothing new. The
+whole network sums to 65, which is 15 + 14 + 13 + 12 + 11.
+
+Refused with a sentence each: the client's signal, direct signal, power and powered state at a
+position, its neighbours, the direction a signal arrives from, writing its redstone, and reading
+its update queue.
+
+### 52 — Fluids
+
+A real cellular simulation on a grid a mod owns. A source drains downward into an empty cell —
+verified on both a two-tall and (after the fix below) a three-tall column — and does not empty
+itself. Levels drop by one per step sideways and stop at 8, with the ninth cell left empty, and
+the grid reaches a fixed point after 9 steps that a further step confirms by changing nothing.
+Viscosity is real: lava (viscosity 5) has not spread after one step where water has, and reaches
+level 1 within ten. Region volume, `touching`, and per-cell source/flowing/empty queries all
+answer, and the default fluids register under the ids `water` and `lava` with `minecraft:water`
+and `minecraft:lava` as the blocks they place.
+
+**A real defect the verification found, and a test that had passed for the wrong reason.**
+`FluidGrid::coords` returned the y and z of an index swapped, so on any grid whose height differed
+from its depth the simulation read and wrote the wrong cell. The module's own draining test used a
+`1×2×1` grid and asserted that the cell below the source filled — and it *passed*, because the
+swapped coordinates sent the water sideways into the very cell being asserted on. The demo's
+three-tall probe failed where the two-tall one passed, which is what exposed it. It now indexes
+correctly, and `a_cell_index_round_trips_on_every_grid_shape` asserts
+`coords(index(x, y, z)) == (x, y, z)` over five grid shapes including `(1, 3, 1)`, `(2, 3, 4)` and
+`(12, 1, 1)`. Restoring the swap takes that test red. The fix also corrected the simulation's
+reach: the volume a source covers in a 12×3×3 grid went from 27.5 (wrong cells) to 12.1.
+
+Refused with a sentence each: the fluid state at a position, its height and velocity, the fluids a
+body touches in the client's world, and the layer a fluid is drawn with.
 
 ## Open: a wild jump on the first frame
 

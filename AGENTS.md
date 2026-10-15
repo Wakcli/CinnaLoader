@@ -75,13 +75,24 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §49 loot tables (the batch was §47, §48, §49 — five modules across three
-  lanes). Sections 1–49 are done and verified in a run with the mod attached; `apis.md` rows 1–49
-  say `done` and `checklist.md` agrees. `cargo test` is green (504 tests across the targets, 0
-  failed) and `cargo clippy --all-targets` is clean.
-- **In progress:** the next section in order from the wishlist (§50 onwards).
+- **Last finished:** §52 fluids (the batch was §50, §51, §52). Sections 1–52 are done and
+  verified in a run with the mod attached; `apis.md` rows 1–52 say `done` and `checklist.md`
+  agrees. `cargo test` is green (535 tests across the targets, 0 failed) and
+  `cargo clippy --all-targets` is clean.
+- **In progress:** the next section in order from the wishlist (§53 onwards).
 - **Next command:** `python3 tools/instructions.py check`, then the next section, reusing the
   pattern the last twenty-five sections follow.
+- **Two defects the §47–§52 verification found, both in floating/index arithmetic:**
+  1. `equipment::get_armor_points()` answered `-0` for no armour, because `std`'s `Sum` for
+     floats seeds with `-0.0` (the true additive identity for IEEE floats, since `0.0 + (-0.0)`
+     loses the sign). Any float `sum()` in this crate can answer a negative zero on empty input.
+     Assert the *sign* when testing: `assert!(x.is_sign_positive())`, because `-0.0 == 0.0` is
+     true and a naive equality test passes against the bug.
+  2. `FluidGrid::coords` returned an index's y and z swapped, so every grid whose height differed
+     from its depth read and wrote the wrong cell — and the module's own draining test *passed*
+     because the swapped coordinates sent the fluid sideways into the cell it asserted on. The
+     lesson: a test that checks a value can pass for the wrong reason; `coords(index(x, y, z)) ==
+     (x, y, z)` over several shapes is what pins an index layout, and it is now a test.
 - **A defect this batch's verification found, worth knowing:** `equipment::get_armor_points()`
   answered `-0` for no armour, because `std`'s `Sum` for floats seeds with `-0.0` (the true
   additive identity for IEEE floats, since `0.0 + (-0.0)` loses the sign). Any float `sum()` in
