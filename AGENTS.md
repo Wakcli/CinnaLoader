@@ -75,12 +75,14 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §26 world generation (commit `07e520a`). Sections 1–26 are done and
-  verified in a live client; `apis.md` rows 1–26 say `done` and `checklist.md` agrees.
-- **In progress:** starting §27 recipes, crafting and smelting.
-- **Next command:** `python3 tools/instructions.py check`, then work `## 27. Recipes,
-  crafting, and smelting` from `../cinnaloader-notes/SECTIONS-25-40.md`, which classifies
-  every name in 25–40. That file says the mostly-real sections are §27 recipes, §28
+- **Last finished:** §27 recipes, crafting and smelting (commit `51cc0c7`). Sections 1–27 are
+  done and verified in a live client; `apis.md` rows 1–27 say `done` and `checklist.md`
+  agrees. `cargo test` is green (239 tests) and `cargo clippy --all-targets` is clean.
+- **In progress:** starting §28 registries, which the research map calls the foundation for
+  §26, §27, §32, §33, §34, §35, §36 and §37.
+- **Next command:** `python3 tools/instructions.py check`, then work `## 28. Registries` from
+  `../cinnaloader-notes/SECTIONS-25-40.md` (it classifies every name in 25–40 and names the
+  traps), reusing the pattern the last ten sections follow. That file says the mostly-real sections are §27 recipes, §28
   registries, §30 rendering primitives, §34 models and animations and §39 camera, and that
   **§28 is the foundational one** for 26/27/32/33/34/35/36/37 — so if a choice has to be
   made, do §28 before the sections that build on it.
