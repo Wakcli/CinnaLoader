@@ -48,7 +48,7 @@ guide, not a contract.
 | 10 | Mod permissions and sandboxing | 16 | done | The wishlist's 29 permissions with a policy that names what this host can enforce and what it cannot. A mod cannot raise its own trust, and the loader clamps what a manifest claims |
 | 11 | Filesystem and storage | 47 | done | `fs::*` rooted in the mod's own directory (escapes refused) and a key/value `storage::*` beside its config |
 | 12 | Resource and asset management | 24 | done | Packs by namespace with priorities, overrides, reload listeners and a per-mod `assets/` pack |
-| 13 | Localization | 21 | todo |
+| 13 | Localization | 21 | done | Keys per language with a fallback, `one\|many` plurals, placeholders, and the handful of formats a player sees |
 | 14 | Game and session state | 33 | todo |
 | 15 | World and dimension APIs | 56 | todo |
 | 16 | Block APIs | 50 | todo |
@@ -286,6 +286,29 @@ Verified in a live client: four packs in one namespace reported in priority orde
 reported as overridden, a resource read from the winning pack with its size and hash, both a
 full reload and a namespace reload running the listener, and validation naming
 `hello:textures/absent.png` as missing.
+
+### 13 — Localization
+
+Translations per language, asked for by key, with the lookup going current language, then
+fallback, then the key itself — so a missing translation reads as something a person can
+still understand. Plurals are written `one|many` (or `one|few|many`, the last form being the
+general case) and English rules are what this knows; a language with more forms needs its own
+function, and the module says so rather than guessing.
+
+`reload()` reads every `lang/<code>.txt` a resource pack offers, so what a mod ships in its
+`assets` and what it registers at runtime are one table, and it fires the
+`language_changed` event. `on_language_changed` adds a watcher, and a change of language
+tells the watchers and the event bus in that order.
+
+Number, date, time, duration and currency formatting know three conventions, chosen from the
+language code, and are documented as not being ICU. `format_date` is Howard Hinnant's
+civil-from-days, which is exact for every date this will see.
+
+Verified in a live client: `de_de` and `en_us` registered, five keys read out of the mod's own
+`assets/lang/`, `Hallo, Welt!` from a placeholder, `ein Apfel` / `4 Äpfel` from one plural
+key, `Bye` coming from the fallback while the current language is German, the watcher fired
+by the change, and `1.234.567,5`, `2023-11-14`, `01:01:01`, `1h 2m 3s` and `12,5 USD` from
+the formatters.
 
 ## Already present (ABI v5)
 

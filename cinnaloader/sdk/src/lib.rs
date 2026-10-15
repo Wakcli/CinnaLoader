@@ -51,6 +51,7 @@ pub mod deps;
 pub mod diagnostics;
 pub mod events;
 pub mod fs;
+pub mod i18n;
 pub mod lifecycle;
 pub mod log;
 pub mod metadata;
@@ -1246,6 +1247,7 @@ pub mod prelude {
         self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,
     };
     pub use crate::fs::{self as fs, File, FsError, Metadata as FileMetadata, Watch};
+    pub use crate::i18n::{self as i18n, Language, NumberStyle};
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};
     pub use crate::mods;

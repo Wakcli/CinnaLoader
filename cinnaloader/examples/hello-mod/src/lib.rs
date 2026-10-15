@@ -691,6 +691,73 @@ impl Mod for Hello {
             resources::unregister_pack("hello-overlay"),
         );
 
+        // Section 13: keys in the languages this mod ships.
+        fs::write_text(
+            "assets/lang/en_us.txt",
+            "hello=Hello, {0}!\napples=one apple|{0} apples\nbye=Bye\n",
+        )
+        .ok();
+        fs::write_text(
+            "assets/lang/de_de.txt",
+            "hello=Hallo, {0}!\napples=ein Apfel|{0} Äpfel\n",
+        )
+        .ok();
+        resources::register_pack(
+            ResourcePack::directory("hello-mod-assets", "assets", 50).namespace("hello"),
+        );
+        i18n::register_language("en_us", "English");
+        i18n::register_language("de_de", "Deutsch");
+        info!(
+            "i18n: languages={:?} current={} fallback={} read={}",
+            i18n::get_languages()
+                .into_iter()
+                .map(|language| language.code)
+                .collect::<Vec<_>>(),
+            i18n::get_current_language(),
+            i18n::get_fallback_language(),
+            i18n::reload(),
+        );
+        let heard = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let counter = std::sync::Arc::clone(&heard);
+        i18n::on_language_changed(move |_| {
+            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        });
+        info!(
+            "i18n: set(de_de)={} current={} translate={:?} with_args={:?} plural1={:?} plural4={:?}",
+            i18n::set_current_language("de_de"),
+            i18n::get_current_language(),
+            i18n::translate("hello"),
+            i18n::translate_with("hello", &["Welt"]),
+            i18n::translate_plural("apples", 1),
+            i18n::translate_plural("apples", 4),
+        );
+        info!(
+            "i18n: has(hello)={} has(bye)={} get(bye)={:?} in_de={:?} watchers={}",
+            i18n::has_translation("hello"),
+            i18n::has_translation("bye"),
+            i18n::get_translation("bye"),
+            i18n::get_translation_in("de_de", "hello"),
+            i18n::watcher_count(),
+        );
+        i18n::set_fallback_language("en_us");
+        info!(
+            "i18n: formats number={:?} number_de={:?} date={:?} time={:?} duration={:?} currency={:?}",
+            i18n::format_number(1234567.5),
+            i18n::format_number_in("de_de", 1234567.5),
+            i18n::format_date(1_700_000_000),
+            i18n::format_time(86_400 + 3661),
+            i18n::format_duration(3_723_000),
+            i18n::format_currency(12.5, "usd"),
+        );
+        i18n::register_translations("fr_fr", &[("hello", "Bonjour, {0} !")]);
+        info!(
+            "i18n: unregister_translations(fr_fr)={} unregister_language(fr_fr)={} languages={} resource_id={:?}",
+            i18n::unregister_translations("fr_fr"),
+            i18n::unregister_language("fr_fr"),
+            i18n::get_languages().len(),
+            i18n::resource_id_for("en_us").map(|id| id.to_string()),
+        );
+
         self.beat = Timer::every(1000);
         // A hook that cannot run yet, and one that runs as this mod is dropped.
         defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));
