@@ -4243,6 +4243,377 @@ impl Mod for Hello {
             );
         });
 
+        // Section 47: a scoreboard and a statistic store a mod really keeps.
+        tasks::schedule_after_ticks(76, move || {
+            if !demo(47) {
+                return;
+            }
+            info!(
+                "scoreboard: create={} objective={} team={} red={} category={}",
+                scoreboard::create(),
+                scoreboard::register_objective(
+                    Objective::new("hello:deaths", "deathCount")
+                        .display_name("Deaths")
+                        .render_type(RenderType::Integer)
+                        .display_slot(DisplaySlot::Sidebar)
+                ),
+                scoreboard::register_team(
+                    Team::new("hello:red")
+                        .display_name("Red")
+                        .color(TextColor::named("red"))
+                        .prefix("[R] ")
+                        .suffix(" !")
+                        .friendly_fire(false)
+                        .collision_rule(CollisionRule::PushOtherTeams)
+                        .name_tag_visibility(Visibility::Always)
+                        .death_message_visibility(Visibility::HideForOtherTeams)
+                ),
+                scoreboard::register_team(Team::new("hello:blue")),
+                statistics::register_category(StatisticCategory::new("hello:blocks")),
+            );
+            info!(
+                "scoreboard: set={:?} add={:?} get={:?} negative={:?} sorted={:?}",
+                scoreboard::set_score("hello:deaths", "Ada", 3),
+                scoreboard::add_score("hello:deaths", "Ada", 2),
+                scoreboard::get_score("hello:deaths", "Ada"),
+                scoreboard::add_score("hello:deaths", "Bo", -1),
+                scoreboard::get_scores("hello:deaths"),
+            );
+            info!(
+                "scoreboard: from_zero={:?} reset={:?} removed={} entry={} entries={:?}",
+                {
+                    scoreboard::add_score("hello:deaths", "Cy", -5);
+                    scoreboard::add_score("hello:deaths", "Cy", 5)
+                },
+                scoreboard::reset_score("hello:deaths", "Bo"),
+                scoreboard::remove_score("hello:deaths", "Cy"),
+                scoreboard::add_entry("hello:deaths", "Dee"),
+                scoreboard::get_entries("hello:deaths"),
+            );
+            info!(
+                "scoreboard: slot={:?} set_slot={} members={:?} team_of={:?} moved={:?} blue={:?}",
+                scoreboard::get_display_slot("hello:deaths"),
+                scoreboard::set_display_slot("hello:deaths", Some(DisplaySlot::List)),
+                {
+                    scoreboard::add_player("hello:red", "Ada");
+                    scoreboard::add_player("hello:red", "Bo");
+                    scoreboard::get_team_members("hello:red")
+                },
+                scoreboard::team_of("Ada"),
+                {
+                    scoreboard::add_player("hello:blue", "Ada");
+                    scoreboard::team_of("Ada")
+                },
+                scoreboard::get_team_members("hello:blue"),
+            );
+            info!(
+                "scoreboard: colour={} prefix={} suffix={} collision={} objectives={} teams={}",
+                scoreboard::set_team_color("hello:red", TextColor::named("dark_red")),
+                scoreboard::set_prefix("hello:red", "R "),
+                scoreboard::set_suffix("hello:red", "!"),
+                scoreboard::set_collision_rule("hello:red", CollisionRule::Never),
+                scoreboard::get_objectives().len(),
+                scoreboard::get_team("hello:red").is_some(),
+            );
+            info!(
+                "scoreboard: stat_register={} set={:?} inc={:?} dec={:?} value={:?} floor={:?}",
+                statistics::register(Statistic::new("hello:blocks.mined", "hello:blocks")),
+                statistics::set_value("hello:blocks.mined", 7),
+                statistics::increment("hello:blocks.mined", 3),
+                statistics::decrement("hello:blocks.mined", 2),
+                statistics::get_value("hello:blocks.mined"),
+                statistics::decrement("hello:blocks.mined", 99),
+            );
+            info!(
+                "scoreboard: total={:?} top={:?} export={} import={} all={} categories={} reset={:?}",
+                statistics::total("hello:blocks"),
+                statistics::top(2),
+                statistics::export().len(),
+                {
+                    let dump = statistics::export();
+                    statistics::import(&dump)
+                },
+                statistics::get_all().len(),
+                statistics::get_categories().len(),
+                statistics::reset("hello:blocks.mined"),
+            );
+            info!(
+                "scoreboard: client-side: board={} sidebar={:?} team={:?} stats={} refusals={:?} {:?}",
+                scoreboard::get().is_some(),
+                scoreboard::client_sidebar(),
+                scoreboard::client_team("Ada"),
+                statistics::get().is_some(),
+                scoreboard::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                statistics::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
+        // Section 48: enchantment and equipment rules a mod really applies.
+        tasks::schedule_after_ticks(78, move || {
+            if !demo(48) {
+                return;
+            }
+            let mut sword = ItemStack::new("minecraft:iron_sword", 1);
+            info!(
+                "enchantments: register={} smite={} max={:?} min_l1={:?} max_l5={:?} applies={}",
+                enchantments::register(
+                    Enchantment::new("hello:sharpness", "Sharpness")
+                        .max_level(5)
+                        .target("minecraft:iron_sword")
+                        .rarity(Rarity::Common)
+                        .incompatible("hello:smite")
+                ),
+                enchantments::register(
+                    Enchantment::new("hello:smite", "Smite")
+                        .max_level(5)
+                        .target("minecraft:iron_sword")
+                        .rarity(Rarity::Uncommon)
+                        .incompatible("hello:sharpness")
+                ),
+                enchantments::get_max_level("hello:sharpness"),
+                enchantments::get_min_cost("hello:sharpness", 1),
+                enchantments::get_max_cost("hello:sharpness", 5),
+                enchantments::can_apply("hello:sharpness", &sword),
+            );
+            info!(
+                "enchantments: apply={} level={:?} modify={} level_now={:?} incompatible={:?}",
+                enchantments::apply(&mut sword, "hello:sharpness", 3),
+                enchantments::get_level(&sword, "hello:sharpness"),
+                enchantments::modify_level(&mut sword, "hello:sharpness", 5),
+                enchantments::get_level(&sword, "hello:sharpness"),
+                enchantments::get_compatibility(
+                    &EnchantmentInstance::new("hello:sharpness", 2),
+                    &EnchantmentInstance::new("hello:smite", 1)
+                ),
+            );
+            info!(
+                "enchantments: same={:?} combine={} resolved={:?} remove={} gone={:?}",
+                enchantments::get_compatibility(
+                    &EnchantmentInstance::new("hello:sharpness", 2),
+                    &EnchantmentInstance::new("hello:sharpness", 2)
+                ),
+                enchantments::can_combine(
+                    &EnchantmentInstance::new("hello:sharpness", 2),
+                    &EnchantmentInstance::new("hello:sharpness", 2)
+                ),
+                enchantments::resolve(
+                    &EnchantmentInstance::new("hello:sharpness", 2),
+                    &EnchantmentInstance::new("hello:sharpness", 2)
+                ),
+                enchantments::remove(&mut sword, "hello:sharpness"),
+                enchantments::get_level(&sword, "hello:sharpness"),
+            );
+            info!(
+                "enchantments: client-side: table={} read={} write={} refusals={:?}",
+                enchantments::enchant_at_table(&sword, 0),
+                enchantments::read_client_enchantments().len(),
+                enchantments::write_client_stack("hello:sharpness", 5),
+                enchantments::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "equipment: gear={} {} helmet={} armor={} value={:?} orders={:?}",
+                equipment::register_gear(
+                    equipment::GearType::new("hello:helmet", "Helmet")
+                        .slot(EquipmentSlot::Head)
+                        .armor(3.0)
+                        .toughness(1.0)
+                        .durability(100)
+                        .attribute(equipment::AttributeGrant::new(
+                            "minecraft:armor",
+                            "hello:helmet",
+                            ModifierKind::Add,
+                            5.0
+                        ))
+                        .model("hello:helmet_model")
+                        .layer("hello:helmet_layer")
+                ),
+                equipment::register_gear(
+                    equipment::GearType::new("hello:chestplate", "Chestplate")
+                        .slot(EquipmentSlot::Chest)
+                        .armor(8.0)
+                        .durability(200)
+                ),
+                equipment::get_gear("hello:helmet").is_some(),
+                equipment::get_all_gear().len(),
+                {
+                    let mut gear = equipment::Equipment::new();
+                    let helmet = equipment::get_gear("hello:helmet");
+                    let plate = equipment::get_gear("hello:chestplate");
+                    if let (Some(helmet), Some(plate)) = (helmet, plate) {
+                        gear.equip(helmet.stack(1), EquipmentSlot::Head);
+                        gear.equip(plate.stack(1), EquipmentSlot::Chest);
+                    }
+                    gear.get_armor_points()
+                },
+                {
+                    let mut gear = equipment::Equipment::new();
+                    let helmet = equipment::get_gear("hello:helmet");
+                    if let Some(helmet) = helmet {
+                        gear.equip(helmet.stack(1), EquipmentSlot::Head);
+                    }
+                    (
+                        gear.attribute_value("minecraft:armor", 10.0, 0.0, 100.0),
+                        gear.attribute_value("minecraft:armor", 10.0, 0.0, 12.0),
+                    )
+                },
+            );
+            let mut worn = equipment::Equipment::new();
+            if let Some(helmet) = equipment::get_gear("hello:helmet") {
+                worn.equip(helmet.stack(1), EquipmentSlot::Head);
+            }
+            info!(
+                "equipment: len={} slot={} damage={} durability={:?} breaks={} after={} points_empty_and_after={:?}",
+                worn.len(),
+                worn.get_slot(EquipmentSlot::Head).is_some(),
+                worn.damage(EquipmentSlot::Head, 60),
+                worn.durability(EquipmentSlot::Head),
+                worn.damage(EquipmentSlot::Head, 999),
+                worn.get_slot(EquipmentSlot::Head).is_some(),
+                (
+                    equipment::Equipment::new().get_armor_points(),
+                    worn.get_armor_points(),
+                ),
+            );
+            info!(
+                "equipment: unequip={} local={} client: slot={:?} equip={} model={:?} refusals={:?}",
+                {
+                    let helmet = equipment::get_gear("hello:helmet");
+                    match helmet {
+                        Some(helmet) => {
+                            worn.equip(helmet.stack(1), EquipmentSlot::Head);
+                            worn.unequip(EquipmentSlot::Head).is_some()
+                        }
+                        None => false,
+                    }
+                },
+                equipment::local_equipment().len(),
+                equipment::read_client_slot(EquipmentSlot::Head),
+                equipment::equip_on_client(
+                    &ItemStack::new("minecraft:iron_helmet", 1),
+                    EquipmentSlot::Head
+                ),
+                equipment::get_client_model("hello:helmet"),
+                equipment::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
+        // Section 49: a loot generator a mod really rolls, seeded and reproducible.
+        tasks::schedule_after_ticks(80, move || {
+            if !demo(49) {
+                return;
+            }
+            info!(
+                "loot: register={} table={} tables={} entries={}",
+                loot::register_table(
+                    loot::Table::new("hello:grass", TableKind::Block).pool(
+                        loot::Pool::new(NumberProvider::fixed(1))
+                            .entry(
+                                loot::Entry::item(
+                                    "minecraft:short_grass",
+                                    NumberProvider::fixed(1)
+                                )
+                                .weight(3)
+                            )
+                            .entry(
+                                loot::Entry::item(
+                                    "minecraft:wheat_seeds",
+                                    NumberProvider::uniform(1, 3)
+                                )
+                                .weight(1)
+                            )
+                    )
+                ),
+                loot::get_table("hello:grass").is_some(),
+                loot::get_tables().len(),
+                loot::get_entries("hello:grass").len(),
+            );
+            let first = loot::generate("hello:grass", 7);
+            let again = loot::generate("hello:grass", 7);
+            info!(
+                "loot: seed7={:?} same_seed_repeats={}",
+                first,
+                first == again,
+            );
+            let mut spread = std::collections::BTreeMap::new();
+            for seed in 0..200u64 {
+                for stack in loot::generate("hello:grass", seed) {
+                    *spread
+                        .entry(format!("{} x{}", stack.item(), stack.count()))
+                        .or_insert(0usize) += 1;
+                }
+            }
+            info!(
+                "loot: over_200_seeds={} distinct_outcomes={} outcomes={:?}",
+                spread.values().sum::<usize>(),
+                spread.len(),
+                spread,
+            );
+            info!(
+                "loot: conditions: chance={} level5={} level1={} flag={}",
+                loot::evaluate_condition(
+                    &Condition::chance(1.0),
+                    &loot::LootContext::new(1),
+                    &mut loot::LootRandom::new(1)
+                ),
+                loot::evaluate_condition(
+                    &Condition::level(5),
+                    &loot::LootContext::new(1).level(7),
+                    &mut loot::LootRandom::new(1)
+                ),
+                loot::evaluate_condition(
+                    &Condition::level(5),
+                    &loot::LootContext::new(1).level(2),
+                    &mut loot::LootRandom::new(1)
+                ),
+                loot::evaluate_condition(
+                    &Condition::flag(true),
+                    &loot::LootContext::new(1).flag(false),
+                    &mut loot::LootRandom::new(1)
+                ),
+            );
+            let mut stacks = loot::generate("hello:grass", 3);
+            info!(
+                "loot: before={:?} applied={:?} after={:?}",
+                stacks.len(),
+                stacks
+                    .first_mut()
+                    .map(|stack| loot::apply_function(
+                        stack,
+                        &Function::set_count(9),
+                        &mut loot::LootRandom::new(1)
+                    ))
+                    .unwrap_or(false),
+                stacks,
+            );
+            info!(
+                "loot: previous_seed={} context_seed={} for_block={:?} for_entity={:?} for_fishing={:?}",
+                loot::set_seed(42),
+                loot::get_context().seed,
+                loot::generate_for_block("hello:grass", 5).len(),
+                loot::generate_for_entity("hello:grass", 5).len(),
+                loot::generate_for_fishing(5).len(),
+            );
+            info!(
+                "loot: names condition={} function={} entry={} provider={} modifier={} pool={}",
+                loot::register_condition("hello:raining"),
+                loot::register_function("hello:bonus"),
+                loot::register_entry_type("hello:choice"),
+                loot::register_number_provider("hello:bell"),
+                loot::register_modifier("hello:lucky"),
+                loot::register_pool(
+                    loot::Pool::new(NumberProvider::fixed(1)).named("hello:single")
+                ),
+            );
+            info!(
+                "loot: client-side: client_table={:?} server_table={:?} rules={:?} world={:?} refusals={:?}",
+                loot::get_client_table("hello:grass"),
+                loot::get_server_table("hello:grass"),
+                loot::get_drop_rules("minecraft:grass_block"),
+                loot::drop_in_world("hello:grass", (0, 64, 0)),
+                loot::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

@@ -75,23 +75,19 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §46 chat and messages (the batch was §44, §45, §46). Sections 1–46 are done
-  and verified in a run with the mod attached; `apis.md` rows 1–46 say `done` and `checklist.md`
-  agrees. `cargo test` is green (459 tests across the targets, 0 failed) and
-  `cargo clippy --all-targets` is clean.
-- **In progress:** starting §47 particles-adjacent visual work and onwards — take the next
-  section in order from the wishlist.
-- **Next command:** `python3 tools/instructions.py check`, then the next section from the
-  wishlist, reusing the pattern the last twenty-five sections follow.
-- **A lesson from the §44–§46 batch worth carrying:** the per-section demo is where a wrong
-  *claim* hides. §44's demo registered a bare duplicate `Channel` (which replaces) and so wiped
-  the payload limit and required version it had just declared; §45's demo redirected from a
-  command that did not exist; §46's demo never registered the translation its message referenced.
-  In all three the library was right and the *demo* was wrong — and the fix is provable: after
-  fixing them the log shows `limit=Some(64)`,
-  `Err(PayloadTooLarge { size: 65, limit: 64 })` and
-  `Err(VersionMismatch { required: 2, actual: 1 })` where it previously showed `32768` and `Ok(0)`.
-  Read a demo's log line by line and ask what it *proves*, not whether it printed.
+- **Last finished:** §49 loot tables (the batch was §47, §48, §49 — five modules across three
+  lanes). Sections 1–49 are done and verified in a run with the mod attached; `apis.md` rows 1–49
+  say `done` and `checklist.md` agrees. `cargo test` is green (504 tests across the targets, 0
+  failed) and `cargo clippy --all-targets` is clean.
+- **In progress:** the next section in order from the wishlist (§50 onwards).
+- **Next command:** `python3 tools/instructions.py check`, then the next section, reusing the
+  pattern the last twenty-five sections follow.
+- **A defect this batch's verification found, worth knowing:** `equipment::get_armor_points()`
+  answered `-0` for no armour, because `std`'s `Sum` for floats seeds with `-0.0` (the true
+  additive identity for IEEE floats, since `0.0 + (-0.0)` loses the sign). Any float `sum()` in
+  this crate can therefore answer a negative zero on empty input — check for that wherever a mod
+  reads a float total. The fix asserts the *sign*, not equality: `assert!(x.is_sign_positive())`,
+  because `-0.0 == 0.0` is true and a naive test would pass against the bug.
 - **How the last three sections were done, and why it worked:** three parallel lanes, one new
   module file each (`sdk/src/widget.rs`, `sdk/src/camera.rs`, `sdk/src/audio.rs`), with the
   manager owning the four files every section touches (`sdk/src/lib.rs` for the module line and

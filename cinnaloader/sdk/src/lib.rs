@@ -1314,6 +1314,24 @@ pub mod prelude {
     pub use crate::entities::{
         self as entities, EntityComponent, EntitySize, EntityType,
     };
+    pub use crate::enchantments::{
+        self as enchantments, Compatibility, EnchantModifierTarget, Enchantment,
+        EnchantmentInstance, EnchantmentModifier, Rarity,
+    };
+    pub use crate::equipment::{
+        self as equipment, AttributeGrant, Equipment, EquipmentSlot, GearType,
+    };
+    pub use crate::loot::{
+        self as loot, Condition, ConditionKind, Entry, Function, FunctionKind, LootContext,
+        LootModifier, LootModifierKind, LootRandom, NumberProvider, Pool, Table, TableKind,
+    };
+    pub use crate::scoreboard::{
+        self as scoreboard, CollisionRule, DisplaySlot, Objective, RenderType, Scoreboard, Team,
+        Visibility,
+    };
+    pub use crate::statistics::{
+        self as statistics, Statistic, StatisticCategory, Statistics as StatStore,
+    };
     pub use crate::events::{
         self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,
     };

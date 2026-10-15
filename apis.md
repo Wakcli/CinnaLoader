@@ -82,9 +82,9 @@ guide, not a contract.
 | 44 | Custom networking between mods | 27 | done | Real peer-to-peer channels between mods in this process: peers with API versions, channels with a codec and an enforced payload limit, version negotiation, ordered streams, request/response and delivery counted per handler; the client's connection refused |
 | 45 | Commands and command registration | 31 | done | A real tokenizer and argument binder (quoted tokens, typed arguments, named errors), real prefix completion over names, aliases and choices, and a real dispatcher that checks the permission level before running an executor; the client's dispatcher refused |
 | 46 | Chat and messages | 34 | done | Components a mod really builds: text, translations resolved through section 13's table with positional and named substitution, styled spans, click and hover events, a JSON round trip, and a real capped history; the client's chat refused |
-| 47 | Scoreboards, teams, and statistics | 39 | todo |
-| 48 | Enchantments, attributes, and equipment | 28 | todo |
-| 49 | Loot tables and drops | 23 | todo |
+| 47 | Scoreboards, teams, and statistics | 41 | done | Real bookkeeping: objectives with criteria and slots, signed scores with exact arithmetic and a defined sort, teams whose membership moves instead of duplicating, and statistic counters clamped at zero with a real export/import; the client's board, sidebar and stats refused |
+| 48 | Enchantments, attributes, and equipment | 30 | done | Real rules: an enchantment cost curve exact at levels 1/3/5, a compatibility check and anvil combine, apply/remove on an item stack, attribute modifiers applied add-then-multiply then clamped, and durability that breaks at zero; the client's table and gear refused |
+| 49 | Loot tables and drops | 23 | done | A real seeded generator: tables, pools with roll ranges, weighted entries, count ranges, gating conditions, functions and modifiers, with the same seed reproducing exactly and the weighting showing in 200 rolls; the client's tables and the server's roll refused |
 | 50 | AI and mob behavior | 34 | todo |
 | 51 | Redstone and block signals | 18 | todo |
 | 52 | Fluids | 21 | todo |
@@ -976,6 +976,57 @@ reached the subscriber, with the text and style intact.
 
 Refused with a sentence each: sending into the client's chat, reading its history or its last
 message, its action bar, title, subtitle and toasts, its formatting, and its message selection.
+
+### 47 — Scoreboards, teams, and statistics
+
+Objectives, scores, entries and teams, all real. `set_score` and `add_score` are exact signed
+arithmetic (`3`, then `+2` gives `5`, then `-1` gives `-1` for another entry, and `-5` followed by
+`+5` lands on `0`), `get_scores` is sorted highest first with a name tie-break
+(`[("Ada", 5), ("Bo", -1)]`), and reset, remove and entry bookkeeping all answer. A team's
+membership *moves*: adding a member who is already on another team puts them on the new one rather
+than duplicating them, and `team_of` and `get_team_members` agree from both sides. Statistics are
+real counters with a documented floor — `decrement` below zero clamps to `0` rather than wrapping —
+plus `total` per category, a `top(n)` in order, and an `export`/`import` pair that round trips.
+
+Refused with a sentence each: the client's scoreboard, its sidebar, its teams and its statistics.
+
+### 48 — Enchantments, attributes, and equipment
+
+The rules are real. The cost curve is exact at the points the module documents (a Common
+enchantment gives a minimum of 1 at level 1 and a maximum of 46 at level 5), `get_compatibility`
+answers `Same`, `Compatible` or `Incompatible`, and combining two level-2 instances of the same
+enchantment resolves to level 3 — equal levels go up by one as the game does. Applying, modifying
+and removing an enchantment on an `ItemStack` reads back at the right level. Attributes apply
+their modifiers in order — add, then multiply-base, then multiply-total — and then clamp:
+a base of 10 with an `Add 5` grant gives 15, and the same value clamps to 12 against a maximum
+of 12 while staying 15 against a maximum of 100. Armour points add up exactly (3 + 8 = 11), and
+durability damages down to breaking at zero and removing the piece rather than going negative.
+
+**A real defect the verification found here:** `get_armor_points()` answered `-0` for equipment
+with no armour. `std`'s `Sum` for floats seeds with `-0.0` — the true additive identity for IEEE
+floats, since `0.0 + (-0.0)` loses the sign — so an empty sum is a negative zero, which is a poor
+answer to hand a mod. It now normalises a zero sum to a positive zero, and
+`no_armour_reports_a_positive_zero` asserts the *sign* (a plain `== 0.0` would have passed before
+the fix, because `-0.0 == 0.0`). Reverting the normalisation takes that test red.
+
+Refused with a sentence each: the client's enchanting table, its item enchantments, its equipment
+slots, its gear model, and a stack the client or the server owns.
+
+### 49 — Loot tables and drops
+
+A generator this host can genuinely run. Tables hold pools with roll ranges; pools hold entries
+with weights and count ranges; entries carry conditions, functions and sub-entries; and the whole
+draw comes from a seeded generator of the module's own, so a seed reproduces exactly and the
+weighting shows: over 200 seeds a 3:1 table dropped `minecraft:short_grass x1` 149 times (74.5 %)
+and wheat seeds 51 times (25.5 %) — the last spread across 13/17/21 for counts 1, 2 and 3, which is
+the uniform count range working. Conditions are real predicates (`chance(1.0)` true,
+`level(5)` true at level 7 and false at level 2, `flag(true)` false against a false flag), a
+`set_count(9)` function turns a one-item drop into nine, and `generate_for_block` resolves while
+`generate_for_entity` and `generate_for_fishing` correctly answer nothing against a Block-kind
+table.
+
+Refused with a sentence each: the client's loot tables, the server's roll, the client's drop rules,
+and rolling against the client's world.
 
 ## Open: a wild jump on the first frame
 
