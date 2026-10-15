@@ -88,63 +88,9 @@ guide, not a contract.
 | 50 | AI and mob behavior | 34 | done | A real decision layer: priority-ordered goals, nearest-target selection with filters and a tie-break, a `select_goal` that names the running goal and why each other was skipped, a navigator stepping `speed × dt` with a stuck detector, target cooldowns and memory; the client's brain, navigator and senses refused |
 | 51 | Redstone and block signals | 18 | done | A real signal solver: one level of decay per step (14, 13, 12, 11), a receiver taking the maximum of two paths rather than their sum, rings that terminate, signal-versus-power as a first-class distinction and a real update queue; the client's redstone refused |
 | 52 | Fluids | 22 | done | A real cellular simulation on a grid a mod owns: a source draining downward, levels dropping one per step and stopping at 8, viscosity making lava lag water, a fixed point after 9 steps and a real region volume; the client's fluid state refused |
-| 53 | Villagers, trading, breeding, and farming | 31 | todo |
-| 54 | Structures and block entities | 34 | todo |
-| 55 | Data formats and serialization | 25 | todo |
-| 56 | Data components and custom data | 20 | todo |
-| 57 | Persistence and saved data | 23 | todo |
-| 58 | Resource packs and data packs | 28 | todo |
-| 59 | Audio, visual, and gameplay registries | 47 | todo |
-| 60 | Game rules and gameplay hooks | 30 | todo |
-| 61 | World and entity queries | 35 | todo |
-| 62 | Math and geometry | 31 | todo |
-| 63 | Time and clocks | 26 | todo |
-| 64 | Weather, time, and environmental effects | 26 | todo |
-| 65 | Game settings and client options | 29 | todo |
-| 66 | Window and platform APIs | 49 | todo |
-| 67 | Performance monitoring and profiling | 49 | todo |
-| 68 | Memory management | 21 | todo |
-| 69 | Debug and developer tools | 41 | todo |
-| 70 | Testing API | 37 | todo |
-| 71 | Hot reload and development mode | 34 | todo |
-| 72 | Scripting and embedded extensions | 28 | todo |
-| 73 | Inter-mod communication | 25 | todo |
-| 74 | Reflection and internal access | 32 | todo |
-| 75 | Patching and transformation | 23 | todo |
-| 76 | Data-driven systems | 14 | todo |
-| 77 | Custom entities and projectiles | 32 | todo |
-| 78 | Custom blocks, items, and content builders | 43 | todo |
-| 79 | Custom menu and screen builders | 24 | todo |
-| 80 | Resource and API migration | 20 | todo |
-| 81 | Error handling and recovery | 18 | todo |
-| 82 | Crash handling and crash reports | 20 | todo |
-| 83 | Mod installation and updates | 27 | todo |
-| 84 | Mod package format | 15 | todo |
-| 85 | Loader configuration and global services | 31 | todo |
-| 86 | Safe mode and recovery startup | 17 | todo |
-| 87 | Feature flags and experimental APIs | 18 | todo |
-| 88 | Plugin APIs for tools and editors | 26 | todo |
-| 89 | Visual mod editor APIs | 31 | todo |
-| 90 | Documentation and API discovery | 35 | todo |
-| 91 | Networking diagnostics and replay | 22 | todo |
-| 92 | Multiplayer and server integration | 27 | todo |
-| 93 | Permissions and roles inside multiplayer | 20 | todo |
-| 94 | Accessibility | 19 | todo |
-| 95 | Notifications and toast messages | 18 | todo |
-| 96 | Update checks and release channels | 20 | todo |
-| 97 | Security, integrity, and trust | 21 | todo |
-| 98 | Telemetry and opt-in diagnostics | 17 | todo |
-| 99 | Save states and snapshots | 20 | todo |
-| 100 | Build system and mod compilation | 31 | todo |
-| 101 | API for resource generation | 20 | todo |
-| 102 | Networking and cross-version translation | 25 | todo |
-| 103 | Plugin bridges and foreign APIs | 17 | todo |
-| 104 | Miscellaneous utility APIs | 44 | todo |
-| 105 | Important API design additions | 0 | todo |
-| 106 | Example API layout | 0 | todo |
-| 107 | What to implement first | 0 | todo |
-
-## Section notes
+| 53 | Villagers, trading, breeding, and farming | 31 | done | §53 real: a trade-offer registry whose matching runs over a real `Inventory` (pick the offer, refuse on missing inputs, spend a use, restock only after the cooldown ticks down) with a multiplier+reputation price; breeding rules that make a `BreedingPair` whose child takes every trait from a seeded c |
+| 54 | Structures and block entities | 36 | done | Real transforms and real storage: a template whose Cw90/Cw180/Cw270 and both mirrors map coordinates exactly, a box with eight corners and a fit test, jigsaw anchors with directions, and a typed block entity with a tick counter, an inventory and a save/load round trip; the client's structures and block entities refused |
+| 55 | Data formats and serialization | 25 | done | A typed value tree (null/bool/int/float/string/list/map) whose `Map` keeps insertion order, so it round trips byte for byte. JSON has a real writer and recursive-descent parser — the documented escape set, `\uXXXX` surrogate pairs, multi-byte UTF-8 passed through, a byte position on a malformed docu |
 
 ### 3 — Versioning and compatibility
 
@@ -1083,6 +1029,42 @@ reach: the volume a source covers in a 12×3×3 grid went from 27.5 (wrong cells
 
 Refused with a sentence each: the fluid state at a position, its height and velocity, the fluids a
 body touches in the client's world, and the layer a fluid is drawn with.
+
+### 53 — Villagers, trading, breeding, and farming
+
+§53 real: a trade-offer registry whose matching runs over a real `Inventory` (pick the offer, refuse on missing inputs, spend a use, restock only after the cooldown ticks down) with a multiplier+reputation price; breeding rules that make a `BreedingPair` whose child takes every trait from a seeded choice of parent, with love/age, cooldown and a growth timer that matures; a crop registry whose seeded growth chance and rate advance real stage boundaries and whose harvest answers a real yield. §53 refused: the client's villagers, their live offers and the trade screen; the client's live animals, love/age and live breeding; the client's crops, their block growth and a live harvest — each with its own `why_unknown` sentence, a `refusals()` list and a `crate::warn!` at the refusing entry point. §53 evidence (`CINNALOADER_DEMO=53`, CLI): "uses 3 -> 2 | wheat 64 -> 44 | emerald 1 | price 20 xp 2", "uses 0 at cooldown 100 | tick 100 -> restocked 1 offers, uses 3", "price 20 -> 18 at reputation 25", "child calf speed 0.3 from parent B (A 0.25 B 0.30) | growth 60", "advance 60 matured 1 | mature true age 60 growth 0 | cooldown 40", "stage 0 -> 3 after 60 ticks (3000 ms)", "chance 0 -> stage 0 after 100 ticks". §53 types for the prelude: trading {TradeOffer, TradeRefusal, TradeReceipt, VillagerHandle}; breeding {Animal, BreedingPair, BreedingRule, Offspring}; farming {Crop, GrowthRule, Planting}. §53 gate: `cargo build -p cinnaloader`, `cargo test -p cinnaloader --lib {trading::,breeding::,farming::}` (8 each), `cargo test -p cinnaloader --doc` (71), `cargo build -p hello-mod`, `cargo clippy --all-targets` — all green, zero warnings.
+
+### 54 — Structures and block entities
+
+Templates rotate and mirror for real: on a 3×1×2 template the local point (2, 0, 1) maps to
+(0, 0, 2) under Cw90, (0, 0, 0) under Cw180 and (1, 0, 0) under Cw270, and mirroring (0, 0, 0)
+gives (2, 0, 0) left-to-right and (0, 0, 1) front-to-back, with the size turning 3×1×2 into 2×1×3.
+A placement answers its real absolute positions, its bounds carry eight corners and a volume of
+six, and `fits_target`/`outside` answer against a target box. Jigsaw anchors carry directions and
+a seeded `generate` returns the pieces. Block entities are typed with a `ConfigValue` data map, a
+tick counter that advances, an inventory, and a serialize/deserialize round trip of 137 bytes that
+comes back equal, inventory intact at five coal.
+
+Refused with a sentence each: the client's structures and their placement in its world, and its
+block entities, their inventories, viewers and update packets.
+
+Implemented and verified; see the row above.
+
+### 55 — Data formats and serialization
+
+A typed value tree (null/bool/int/float/string/list/map) whose `Map` keeps insertion order, so it round trips byte for byte. JSON has a real writer and recursive-descent parser — the documented escape set, `\uXXXX` surrogate pairs, multi-byte UTF-8 passed through, a byte position on a malformed document, and duplicate keys that keep the first position and the last value. The binary form is a tag byte then a payload (zigzag LEB128 ints, little-endian floats, varint-length strings, lists and maps), and it refuses truncation and any trailing byte rather than guessing. Base64 (standard alphabet, `=` padding), hex, a PackBits compressor, CRC-32 (IEEE) and FNV-1a 64 are real, each refusing a bad input. `migrate` walks a schema's registered steps from version N to N+1 and refuses a step no migration covers. The client's own NBT dialect and level format are refused in both directions, each with its sentence in
+
+### 56 — Data components and custom data
+
+56. Data components and custom data — `sdk/src/data.rs`. Types: `ComponentType` (id/name/kind/default), `ValueKind` (integer, float, string, bool, list, map), Real: a component-type registry; `set`/`get`/`get_typed`/`remove`/`has`/`clear`/`keys`, with a typed read refusing a wrong kind as `TypeMismatch { component, wanted, found }`; patches and merges (right-hand wins, a `None` removes, applied to a copy leaves the original); exact round trip through `ConfigValue` (empty map and a nested list); absent vs present-at-default by equality/`fingerprint`; custom data; watchers; migrations. Refused: the client's item/entity components, a live stack's, and writing what the client reads — `why_unknown`, `refusals`.
+
+### 57 — Persistence and saved data
+
+typed `ConfigValue` key space, dirty flag, autosave interval; `Duration::ZERO` = never), atomic save/load through `crate::fs` with a format version that is refused when newer than `FORMAT_VERSION`, plus backup/restore/migrate/export/import and the 25 wishlist free functions. the client's level/player/registry/save-directory are refused with `why_unknown`/`refusals` and bytes written, a dirty flag cleared by the save, autosave fired after its interval and not before, and a too-new format refused.
+
+### 58 — Resource packs and data packs
+
+58. Resource packs and data packs — done (crate-level, in-game run pending). All 29 names in sdk/src/packs.rs as a real resolver over per-pack virtual file trees built on resources::ResourcePack (tree) and resources::ResourceId (paths), not a second resource type. Priority-then-id winner in resolve/providers, data-file merge where the later (higher-priority) key wins, format gate (SUPPORTED_FORMAT=34) refused by name, and the client's own pack load, pack list, resource reload and mounted-pack reads refused via why_unknown/refusals plus warn!. 9 lib tests; doctest; build/test/clippy green — no in-game run yet.
 
 ## Open: a wild jump on the first frame
 

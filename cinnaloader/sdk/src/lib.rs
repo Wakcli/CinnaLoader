@@ -1315,6 +1315,30 @@ pub mod prelude {
         self as commands, Argument, ArgumentType, ArgumentValue, Command, CommandCall,
         CommandError, CommandOrigin, CommandResult, CommandSource, ParsedCommand, TreeNode,
     };
+    pub use crate::trading::{self as trading, TradeOffer, TradeRefusal, TradeReceipt, VillagerHandle};
+    pub use crate::breeding::{self as breeding, Animal, BreedingPair, BreedingRule, Offspring};
+    pub use crate::farming::{self as farming, Crop, GrowthRule, Planting};
+pub use crate::structures::{
+        self as structures, Bounds, Declaration, DeclarationKind, Direction as StructureDirection,
+        Jigsaw, Mirror, Placed, Placement, Rotation, Structure, Template,
+    };
+pub use crate::block_entities::{self as block_entities, BlockEntity, BlockEntityType};
+    pub use crate::serialization::{
+    self as serialization, Error as SerializeError, Field, Kind, Map, Migration, Schema,
+    Serializer, Value,
+};
+pub use crate::data::{
+        self as data, Codec as DataCodec, ComponentMap, ComponentType as DataComponentType, DataError,
+        DataMigration, DataType,
+        Patch, ValueKind,
+    };
+    pub use crate::persistence::{
+    self as persistence, DataScope, PersistError, SavedData, Store, StoreId, StoreMigration,
+};
+pub use crate::packs::{
+        self as packs, MergeEntry, MergedFile, Pack, PackKind, PackManifest, PackMetadata,
+        PackOverride,
+    };
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
         State as DrawState, Transform,
