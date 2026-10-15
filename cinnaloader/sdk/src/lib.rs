@@ -69,6 +69,7 @@ pub mod permissions;
 pub mod physics;
 pub mod player;
 pub mod raycast;
+pub mod recipes;
 pub mod resources;
 pub mod storage;
 pub mod tasks;
@@ -1304,6 +1305,10 @@ pub mod prelude {
         self as raycast, from_camera, from_entity as raycast_from_entity, from_position,
         from_body, EntityBox, RaycastQuery, RaycastResult, Target,
         CAMERA_REACH, REACH_CREATIVE, REACH_SURVIVAL,
+    };
+    pub use crate::recipes::{
+        self as recipes, from, pattern, shaped, shapeless, Ingredient, IngredientStack, Recipe,
+        RecipeType,
     };
     pub use crate::resources::{
         self as resources, Provider, ResourceDependency, ResourceId, ResourceKind,

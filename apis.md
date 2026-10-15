@@ -532,6 +532,32 @@ twice and a different one drawing different ones; noise reproducibly seeded; a 3
 chunk generated twice identically from one seed; `populate_chunk` filling 256 columns and a
 2×2×2 structure placing eight blocks.
 
+### 27 — Recipes, crafting and smelting
+
+A recipe is data — a shaped pattern with a key, a shapeless list, or a machine recipe with an
+input, an output, a cook time and experience — and every kind registers here: shaped,
+shapeless, smelting, blasting, brewing, smithing, stonecutting and machine, plus types,
+serializers and conditions a mod invents. `get_all`, `get`, `get_by_id`, `get_for_result`,
+`replace`, `remove`, `get_type`, `get_category`, `get_cook_time`, `get_experience`,
+`get_ingredients`, `get_result` and `get_remaining_items` read it all back.
+
+The matching is real and is the point of the section: a shaped recipe matches its pattern at
+any offset in a grid of the right size, mirrored horizontally unless the recipe says
+otherwise, with a mirrored column being a *rotation* and therefore not a match — which is
+exactly what the game does and is tested as such. A shapeless recipe matches any arrangement
+with the right counts; a tag ingredient matches an item named for the tag or carrying it as a
+tag; a cooking recipe takes one input. `find_matching`, `can_craft`, `craft`, `craft_all`,
+`grid_from` and `find_matching_items` work over `ItemStack`s from section 17 and the
+`Inventory` layout from section 18, so a mod crafts here exactly as the game would.
+
+Fuels are a registry with the game's own values (coal 1600 ticks, a stick 100, a lava bucket
+20000) and `batch_size` says how many of a recipe a piece of fuel cooks.
+
+Refused: the client's own recipes and serializer registry, and crafting into the player's
+inventory. Verified in a live client: all seven kinds registered, a column pattern matching
+while its rotation does not, `craft` giving four torches, coal cooking eight glass, and the
+whole refusal table present.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside

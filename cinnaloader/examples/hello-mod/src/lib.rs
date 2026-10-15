@@ -2062,6 +2062,119 @@ impl Mod for Hello {
             );
         });
 
+        // Section 27: recipes a mod ships, and the matching it can run itself.
+        tasks::schedule_after_ticks(36, move || {
+            info!(
+                "recipes: register_shaped={} recipe={:?}",
+                recipes::register_shaped(recipes::pattern(
+                    recipes::shaped("hello:torches", "minecraft:torch", 4),
+                    &["C", "S"],
+                )
+                .key('C', "minecraft:coal")
+                .key('S', "minecraft:stick")
+                .category("misc")
+                .experience(0.1)),
+                recipes::get_by_id("hello:torches").map(|recipe| recipe.to_string()),
+            );
+            info!(
+                "recipes: register_shapeless={} smelting={} blasting={} brewing={} smithing={} machine={}",
+                recipes::register_shapeless(recipes::from(
+                    recipes::shapeless("hello:planks", "minecraft:oak_planks", 4),
+                    &["minecraft:oak_log"],
+                )),
+                recipes::register_smelting_recipe(
+                    Recipe::new(recipes::RecipeType::Smelting, "hello:glass", ItemStack::new("minecraft:glass", 1))
+                        .ingredient(recipes::IngredientStack::of("minecraft:sand", 1))
+                        .experience(0.1)
+                ),
+                recipes::register_blasting_recipe(
+                    Recipe::new(recipes::RecipeType::Blasting, "hello:iron", ItemStack::new("minecraft:iron_ingot", 1))
+                        .ingredient(recipes::IngredientStack::of("minecraft:iron_ore", 1))
+                ),
+                recipes::register_brewing_recipe(
+                    Recipe::new(recipes::RecipeType::Brewing, "hello:potion", ItemStack::new("minecraft:potion", 1))
+                        .ingredient(recipes::IngredientStack::of("minecraft:water_bottle", 1))
+                ),
+                recipes::register_smithing_recipe(
+                    Recipe::new(recipes::RecipeType::Smithing, "hello:sword", ItemStack::new("minecraft:diamond_sword", 1))
+                        .ingredient(recipes::IngredientStack::of("minecraft:diamond_sword", 1))
+                ),
+                recipes::register_machine_recipe(
+                    Recipe::new(recipes::RecipeType::Machine, "hello:powder", ItemStack::new("minecraft:gunpowder", 2))
+                        .ingredient(recipes::IngredientStack::of("minecraft:flint", 1))
+                        .time(60)
+                ),
+            );
+            let coal = ItemStack::new("minecraft:coal", 1);
+            let stick = ItemStack::new("minecraft:stick", 1);
+            let column = vec![Some(coal.clone()), Some(stick.clone())];
+            let mirrored = vec![Some(stick.clone()), Some(coal.clone())];
+            let three = recipes::grid_from(
+                &[ItemStack::new("minecraft:coal", 1), ItemStack::new("minecraft:stick", 1)],
+                3,
+            );
+            info!(
+                "recipes: match: column={} mirrored={} three_by_three={} wrong_item={} partial={}",
+                recipes::can_craft(&column, 1),
+                recipes::can_craft(&mirrored, 1),
+                recipes::can_craft(&three, 3),
+                recipes::can_craft(&[Some(ItemStack::new("minecraft:dirt", 1)), Some(stick.clone())], 1),
+                recipes::can_craft(&[Some(coal.clone())], 1),
+            );
+            info!(
+                "recipes: craft={:?} all={:?} found={} ingredients={:?} result={:?} category={:?} time={:?} experience={:?}",
+                recipes::craft(&column, 1).map(|stack| stack.to_string()),
+                recipes::craft_all(&column, 1)
+                    .into_iter()
+                    .map(|stack| stack.to_string())
+                    .collect::<Vec<_>>(),
+                recipes::find_matching(&column, 1).len(),
+                recipes::get_ingredients("hello:torches")
+                    .into_iter()
+                    .map(|ingredient| ingredient.label())
+                    .collect::<Vec<_>>(),
+                recipes::get_result("hello:torches").map(|stack| stack.count()),
+                recipes::get_category("hello:torches"),
+                recipes::get_cook_time("hello:glass"),
+                recipes::get_experience("hello:glass"),
+            );
+            info!(
+                "recipes: fuels: coal={:?} stick={:?} unknown={:?} register={} batch={} types={} recipe_types={}",
+                recipes::get_fuel_time("minecraft:coal"),
+                recipes::get_fuel_time("minecraft:stick"),
+                recipes::get_fuel_time("minecraft:dirt"),
+                recipes::register_fuel("hello:peat", 400),
+                recipes::batch_size("hello:glass", "minecraft:coal"),
+                recipes::get_all().len(),
+                recipes::get(Some(recipes::RecipeType::Smelting)).len(),
+            );
+            info!(
+                "recipes: register_type={} names={} serializer={} serializers={} condition={} conditions={}",
+                recipes::register_type("hello:alchemy"),
+                recipes::get_type_names().len(),
+                recipes::register_serializer("hello:alchemy"),
+                recipes::get_serializers().len(),
+                recipes::register_condition("hello:loaded"),
+                recipes::get_conditions().len(),
+            );
+            info!(
+                "recipes: by_id={:?} for_result={} type={:?} replace={} remove={} remaining={}",
+                recipes::get_by_id("hello:torches").map(|recipe| recipe.id),
+                recipes::get_for_result("minecraft:torch").len(),
+                recipes::get_type("hello:torches"),
+                recipes::replace(recipes::shaped("hello:torches", "minecraft:torch", 4)),
+                recipes::remove("hello:potion"),
+                recipes::get_remaining_items("hello:torches").len(),
+            );
+            info!(
+                "recipes: client: recipes={} serializer={:?} craft_into_player={} refusals={:?}",
+                recipes::get_client_recipes().len(),
+                recipes::get_serializer("minecraft:crafting_shaped"),
+                recipes::craft_into_player(&column, 1),
+                recipes::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",
