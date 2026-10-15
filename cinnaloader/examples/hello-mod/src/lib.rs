@@ -2175,6 +2175,169 @@ impl Mod for Hello {
             );
         });
 
+        // Section 28: one registry engine for everything a mod ships.
+        tasks::schedule_after_ticks(38, move || {
+            let gems = registry::register_custom_registry("hello:gems");
+            info!(
+                "registry: custom={:?} registries={} register={:?} keyed={:?}",
+                gems.name,
+                registry::registered().len(),
+                registry::register_in("hello:gems", "hello:ruby", ConfigValue::Integer(3)),
+                registry::register_keyed("hello:gem", "gem", ConfigValue::Integer(7)),
+            );
+            info!(
+                "registry: get={:?} by_key={:?} id={:?} key={:?} contains={} size={} version={}",
+                registry::get("hello:gem"),
+                registry::get_by_key("gem"),
+                registry::get_id("gem"),
+                registry::get_key("hello:gem"),
+                registry::contains("hello:gem"),
+                registry::get_size(),
+                registry::get_version(),
+            );
+            info!(
+                "registry: in_gems={:?} batch={:?} replace={:?} values={} keys={} entries={}",
+                registry::get_in("hello:gems", "hello:ruby"),
+                registry::register_batch(&[
+                    ("hello:a", ConfigValue::Integer(1)),
+                    ("hello:b", ConfigValue::Integer(2)),
+                ]),
+                registry::replace("hello:a", ConfigValue::Integer(9)),
+                registry::values().len(),
+                registry::keys().len(),
+                registry::entries().len(),
+            );
+            info!(
+                "registry: iterate={:?} changes={:?}",
+                registry::iterate(|id, value| format!("{id}={}", value.render())),
+                registry::get_changes()
+                    .into_iter()
+                    .map(|change| change.to_string())
+                    .collect::<Vec<_>>(),
+            );
+            let snapshot = registry::snapshot();
+            info!(
+                "registry: freeze={} frozen={} blocked={:?} unfreeze={} restore={:?} snapshot={}",
+                registry::freeze(None),
+                registry::is_frozen(None),
+                registry::register("hello:blocked", ConfigValue::Integer(1)),
+                registry::unfreeze(None),
+                snapshot.as_ref().map(registry::restore),
+                snapshot.as_ref().map(|snapshot| snapshot.size()).unwrap_or_default(),
+            );
+            info!(
+                "registry: validate={:?} serializer={} codec={} serializers={} manager={:?} client_registries={}",
+                registry::validate(),
+                registry::register_serializer("hello:gem", "key=value"),
+                registry::register_codec("hello:other", "key=value"),
+                registry::serializers().len(),
+                registry::get_registry_manager(),
+                registry::CLIENT_REGISTRIES.len(),
+            );
+            let handle = registry::register_custom_registry("Blocks");
+            info!(
+                "registry: own_blocks={:?} register={:?} get={:?} unregister={:?}",
+                handle.name,
+                registry::register_in("Blocks", "hello:lantern", ConfigValue::Integer(1)),
+                registry::get_in("Blocks", "hello:lantern"),
+                registry::unregister_in("Blocks", "hello:lantern"),
+            );
+        });
+
+        // Section 29: the render lifecycle this host can hook, and the renderer it cannot.
+        tasks::schedule_after_ticks(40, move || {
+            render::register_event_kinds();
+            let frames = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+            let counter = std::sync::Arc::clone(&frames);
+            let start = render::on_frame_start(move |_| {
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            });
+            let hud = render::on_hud_render(|_| {});
+            let end = render::on_frame_end(|_| {});
+            let reload = render::on_resource_reload(|_| {});
+            info!(
+                "render: subscriptions start={start} hud={hud} end={end} reload={reload} listeners={}",
+                render::listener_count(cinnaloader::events::kind::RENDER_TICK),
+            );
+            info!(
+                "render: register={} transparent={} pass={} layer={}",
+                render::register_renderer(
+                    render::Renderer::new("hello:outline")
+                        .layer("hello:lines")
+                        .order(10)
+                ),
+                render::register_renderer(
+                    render::Renderer::new("hello:glow")
+                        .layer("hello:glow")
+                        .order(5)
+                        .transparent()
+                        .no_cull()
+                ),
+                render::register_pass("hello:post"),
+                render::register_render_layer("hello:solid"),
+            );
+            info!(
+                "render: declared={:?} outline={:?}",
+                render::get_renderers()
+                    .into_iter()
+                    .map(|renderer| renderer.to_string())
+                    .collect::<Vec<_>>(),
+                render::get_renderer("hello:outline").map(|renderer| renderer.layer),
+            );
+            info!(
+                "render: cache={} resources={} render_thread={} request_frame={} events={} known={}",
+                render::invalidate_cache(),
+                render::reload_resources(),
+                render::is_render_thread(),
+                render::request_frame(),
+                render::event_kinds().len(),
+                render::has_event_kind("render_chunk"),
+            );
+            info!(
+                "render: client-side: context={:?} state={:?} camera={:?} view={:?} projection={:?} model={:?}",
+                render::get_context(),
+                render::get_state(),
+                render::get_camera(),
+                render::get_view_matrix(),
+                render::get_projection_matrix(),
+                render::get_model_matrix(),
+            );
+            info!(
+                "render: client-side: framebuffer={:?} target={:?} device={:?} backend={:?} passes: world={} entity={} block={} chunk={} hand={}",
+                render::get_framebuffer(),
+                render::get_render_target(),
+                render::get_device(),
+                render::get_backend(),
+                render::on_world_render_start(|_| {}),
+                render::on_entity_render(|_| {}),
+                render::on_block_render(|_| {}),
+                render::on_chunk_render(|_| {}),
+                render::on_hand_render(|_| {}),
+            );
+            info!(
+                "render: client-side: screen={} particle={} nameplate={} outline={} shadow={} post={} texture={} shader={} refusals={:?}",
+                render::on_screen_render(|_| {}),
+                render::on_particle_render(|_| {}),
+                render::on_nameplate_render(|_| {}),
+                render::on_outline_render(|_| {}),
+                render::on_shadow_render(|_| {}),
+                render::on_post_process(|_| {}),
+                render::on_texture_upload(|_| {}),
+                render::on_shader_reload(|_| {}),
+                render::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "render: unsubscribe={} {} {} {} unregister={} pass={} layer={}",
+                render::unsubscribe(start),
+                render::unsubscribe(hud),
+                render::unsubscribe(end),
+                render::unsubscribe(reload),
+                render::unregister_renderer("hello:glow"),
+                render::unregister_pass("hello:post"),
+                render::unregister_render_layer("hello:solid"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

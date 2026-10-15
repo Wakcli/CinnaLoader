@@ -64,7 +64,7 @@ guide, not a contract.
 | 26 | World generation | 35 | todo |
 | 27 | Recipes, crafting, and smelting | 29 | todo |
 | 28 | Registries | 25 | todo |
-| 29 | Rendering lifecycle and render hooks | 38 | todo |
+| 29 | Rendering lifecycle and render hooks | 38 | done | Frame-start, frame-end and HUD callbacks are real (the loader brackets every frame); renderer/layer/pass declarations are real data; cache and resource reload are real; every client pass refused with a reason |
 | 30 | Rendering primitives | 46 | todo |
 | 31 | GPU and graphics resources | 35 | todo |
 | 32 | Shader APIs | 24 | todo |
@@ -557,6 +557,47 @@ Refused: the client's own recipes and serializer registry, and crafting into the
 inventory. Verified in a live client: all seven kinds registered, a column pattern matching
 while its rotation does not, `craft` giving four torches, coal cooking eight glass, and the
 whole refusal table present.
+
+### 28 — Registries
+
+One engine, and the section that the rest of the loader's registries want to be built on: a
+`Registry` of `ConfigValue`s with an id-to-key index and the reverse lookup, `register`,
+`register_keyed`, `register_batch`, `unregister`, `replace`, `get_by_id`, `get_by_key`,
+`get_key`, `get_id`, `contains`, `keys`, `values`, `entries`, `iterate`, `get_size`, a
+version that rises on every change, a change log that says what happened when, `freeze` and
+`unfreeze` (a frozen registry refuses every change with the reason), `snapshot` and `restore`
+(the section 18 transaction shape over a whole registry), `validate` (an id with no
+namespace, two ids answering to one key, values a validator refused) and a serializer
+registry that `register_codec` shares, because Bedrock's wire format is its own and a codec in
+the JVM sense does not exist here.
+
+`register_custom_registry` is the payoff: a mod names a registry of its own — including
+`Blocks` or `Items`, which are free text here — and `register_in`/`get_in`/`unregister_in`
+work on it while the *client's* registries of the same names stay out of reach.
+`get_registry_manager` is `None` with the reason, and `CLIENT_REGISTRIES` lists the
+thirty-one names the client owns.
+
+Verified in a live client: a named registry and a keyed entry, `get_by_key` and the reverse
+lookups, a batch, `iterate`, the change log, `freeze` refusing a registration with
+`Err(Frozen("cinnaloader:default"))`, a snapshot restored, `validate` clean, two serializers,
+the client manager `None`, and a mod's own registry called `Blocks` taking an entry.
+
+### 29 — Rendering lifecycle and render hooks
+
+Three things here are real, and they are the ones a mod uses. Frame boundaries: the loader's
+frame hook brackets every client frame, so `on_frame_start`, `on_frame_end` and
+`on_hud_render` are subscriptions to the section 6 render event and run at the right moment on
+the render thread — verified in a live client with all three firing in pre/main/post order from
+one render tick. Declarations: `register_renderer`, `register_render_layer`, `register_pass`
+and their `unregister`s are real data, read back in draw order (order first, then name), and
+nothing draws them yet, which the module says. Cache and resources: `invalidate_cache` and
+`reload_resources` call section 12's reload listeners, and `is_render_thread` answers.
+
+Everything inside the client's renderer is refused with its own reason: the world, entity,
+block, chunk, hand, screen, particle, nameplate, outline and shadow passes, post-processing,
+texture uploads, shader reloads, the camera, the view/projection/model matrices, the
+framebuffer, render target, device and backend, and `request_frame`. The seventeen render
+event names are registered on the bus so a mod's subscription is already in place.
 
 ## Open: a wild jump on the first frame
 

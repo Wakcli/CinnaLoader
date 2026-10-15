@@ -70,6 +70,8 @@ pub mod physics;
 pub mod player;
 pub mod raycast;
 pub mod recipes;
+pub mod registry;
+pub mod render;
 pub mod resources;
 pub mod storage;
 pub mod tasks;
@@ -1310,6 +1312,11 @@ pub mod prelude {
         self as recipes, from, pattern, shaped, shapeless, Ingredient, IngredientStack, Recipe,
         RecipeType,
     };
+    pub use crate::registry::{
+        self as registry, Change, ChangeKind, Registry, RegistryError, RegistryHandle,
+        RegistrySnapshot, CLIENT_REGISTRIES, DEFAULT as DEFAULT_REGISTRY,
+    };
+    pub use crate::render::{self as render, Renderer};
     pub use crate::resources::{
         self as resources, Provider, ResourceDependency, ResourceId, ResourceKind,
         ResourceLocation, ResourceManager, ResourceMetadata, ResourceOverride, ResourcePack,
