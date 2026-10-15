@@ -55,6 +55,7 @@ pub mod log;
 pub mod metadata;
 pub mod modinfo;
 pub mod mods;
+pub mod permissions;
 pub mod tasks;
 pub mod version;
 
@@ -1222,7 +1223,8 @@ pub mod prelude {
         description,
         directory, entrypoint, environment, git_commit, icon, id, instance, is_development,
         is_enabled, is_reloading, license, loader_version, manifest, manifest_version, metadata,
-        name, namespace, permissions, plugin_directory, resource_directory, source_url, state,
+        name, namespace, permissions, plugin_directory, reported, resource_directory, source_url,
+        state,
         tags, version, website,
     };
     pub use crate::capability::{self as capabilities, Capability};
@@ -1243,6 +1245,9 @@ pub mod prelude {
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};
     pub use crate::mods;
+    pub use crate::permissions::{
+        self as permissions, AuditEntry, AuditKind, Grant, TrustLevel,
+    };
     pub use crate::tasks::{
         self as tasks, AsyncResult, CancellationToken, JobGroup, JobQueue, MainThreadExecutor,
         NetworkExecutor, RenderThreadExecutor, TaskExecutor, TaskHandle, TaskMetrics, TaskPriority,

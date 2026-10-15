@@ -45,7 +45,7 @@ guide, not a contract.
 | 7 | Threading and task scheduling | 32 | done | Tick, delayed, repeating, render-phase, worker and pool tasks, with tokens, groups, metrics and thread checks. The rules are in the module docs |
 | 8 | Logging and diagnostics | 38 | done | Levelled log with sinks, filters, history, structured fields and error capture; a report, a health check and a capability report |
 | 9 | Configuration system | 42 | done | Typed values with a schema, constraints, migrations, watchers, transactions and import/export/backup. Saved in `<config_dir>/config.ini` |
-| 10 | Mod permissions and sandboxing | 16 | todo |
+| 10 | Mod permissions and sandboxing | 16 | done | The wishlist's 29 permissions with a policy that names what this host can enforce and what it cannot. A mod cannot raise its own trust, and the loader clamps what a manifest claims |
 | 11 | Filesystem and storage | 47 | todo |
 | 12 | Resource and asset management | 24 | todo |
 | 13 | Localization | 21 | todo |
@@ -216,6 +216,22 @@ suspect. Repeated for the record in `cinnaloader-notes/STATUS.md`.
 Separately: a client killed with `SIGTERM` faults inside the NVIDIA driver on the way out
 whether or not the loader is attached, so `tools/mcp.py` now asks it to quit first and each
 run's coredump situation has to be read against how the run ended.
+
+### 10 — Mod permissions and sandboxing
+
+Every permission in the section is answered with a `Grant`: `Always` for the two the loader
+really enforces (reading and writing the mod's own files), `OnRequest` for what it can do
+within its own overlay and input, and `Never` with a reason for everything the client gives
+no hook for. `request`, `grant`, `revoke`, `restrict`, `prompt_user`, `check`, `has`, `list`,
+`list_for_mod`, `list_requested`, `register`, `unregister`, `is_trusted`, `set_trust_level`,
+`get_audit_log`, `record_access` and `get_policy` are all there and none of them pretends:
+the audit log has a line per decision, and a refusal carries its reason.
+
+Two properties are enforced rather than documented, and the second crosses the process
+boundary: a mod can only ever narrow its own permissions or trust, and the loader clamps a
+manifest that claims `trusted` down to `normal`, telling the mod so. Verified in a live
+client: `hello_mod asked for trust trusted, which is the user's to give: clamped to normal`
+in the loader's log, and the mod itself reporting `trust=normal`.
 
 ## Already present (ABI v5)
 

@@ -47,6 +47,32 @@ So:
   (`curl -H 'content-type: application/json' -d '{"content":"..."}' <url>`), one short
   message: the section just finished, the one in progress, the commit hash.
 
+## The user's instructions arrive through `new-instructions.md`
+
+The user writes instructions into `new-instructions.md` in this repository, through GitHub,
+without saying anything in chat. That file is theirs: **never delete, reword, reorder or
+truncate it.** Read it, act on it, and leave it exactly as it is.
+
+The loop, and it is not optional:
+
+```sh
+python3 tools/instructions.py check      # after every push, and before starting each section
+python3 tools/instructions.py log <id> --note "what was done"
+```
+
+1. `check` fetches `origin/main` and `origin/dev`, reads whichever has the newest copy of the
+   file, and prints `NEW <id> :: <first line>` for every instruction that has not been logged.
+   An instruction's id is a hash of its text, so editing the wording makes it a new one and
+   renumbering does not.
+2. Every `NEW` line is a task. Add it to `checklist.md` (and to `apis.md` if it is a section's
+   worth of work), then do it — alongside the roadmap, not instead of it.
+3. Log it with `instructions.py log` once it is dealt with, saying what was done. The log is
+   `instruction-log.md`, and it is what stops the same instruction being done twice.
+4. Work in progress is never dropped for a new instruction: finish or park the section first,
+   then take the new one.
+
+If `check` prints `none`, there is nothing new and the roadmap continues where it was.
+
 ### Where I am
 
 - **Last finished:** §8 logging and diagnostics, commit pending at the time of writing.

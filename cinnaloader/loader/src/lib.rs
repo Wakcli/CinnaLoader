@@ -386,6 +386,13 @@ fn finished_loading(name: &str) {
     }
 }
 
+/// The trust level a mod is held to: what it asked for, never above what this loader gives
+/// without the user saying otherwise.
+fn clamped_trust(name: &str) -> cinnaloader::permissions::TrustLevel {
+    use cinnaloader::permissions::TrustLevel;
+    declared_manifest(name).trust.min(TrustLevel::Normal)
+}
+
 /// The manifest a mod declared, or a bare one when it declared nothing.
 fn declared_manifest(name: &str) -> ModManifest {
     records()
@@ -429,6 +436,8 @@ fn mod_info(name: &str) -> ModInfo {
         library,
         entrypoint: ModEntrypoint::default(),
         loader_version: LOADER_VERSION.to_owned(),
+        // What the loader enforces, which is never more than normal unless the user says so.
+        trust: clamped_trust(name),
     }
 }
 
@@ -588,6 +597,9 @@ unsafe extern "C" fn host_graph(out: *mut c_char, capacity: usize) -> i32 {
         }
         for capability in &record.manifest.capabilities {
             text.push_str(&format!("modcap={}|{}\n", record.name, capability.as_str()));
+        }
+        for permission in &record.manifest.permissions {
+            text.push_str(&format!("modperm={}|{}\n", record.name, permission.as_str()));
         }
     }
     for capability in cinnaloader::capability::ALL {
@@ -1333,6 +1345,15 @@ impl Host {
             bail!("mod init failed with code {code}");
         }
         // The mod has declared its manifest by now, so its requirements can be checked.
+        // A mod asking to be trusted is exactly the mod not to trust: the level is clamped,
+        // and the attempt is written down.
+        let claimed = declared_manifest(&name).trust;
+        if claimed > cinnaloader::permissions::TrustLevel::Normal {
+            eprintln!(
+                "[cinnaloader] {name} asked for trust {}, which is the user's to give: clamped to normal",
+                claimed.as_str()
+            );
+        }
         let report = cinnaloader::compat::check(&declared_manifest(&name), &host_facts());
         if !report.is_compatible() {
             bail!("incompatible: {}", report.failures().join("; "));

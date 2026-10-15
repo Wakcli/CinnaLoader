@@ -259,23 +259,23 @@ impl Capability {
         match self {
             Self::FilesystemRead => &[Permission::ReadFiles],
             Self::FilesystemWrite => &[Permission::WriteFiles],
-            Self::RawNetworkAccess | Self::PacketSend => &[Permission::Network],
-            Self::PlayerRead => &[Permission::PlayerState],
+            Self::RawNetworkAccess | Self::PacketSend => &[Permission::UseSockets],
+            Self::PlayerRead => &[Permission::ReadPlayerData],
             Self::WorldRead
-            | Self::WorldWrite
             | Self::BlockRead
-            | Self::BlockWrite
             | Self::EntityRead
+            | Self::InventoryRead => &[Permission::ReadWorld],
+            Self::WorldWrite
+            | Self::BlockWrite
             | Self::EntityWrite
-            | Self::InventoryRead
-            | Self::InventoryWrite => &[Permission::WorldState],
+            | Self::InventoryWrite => &[Permission::ModifyWorld],
             Self::Render
             | Self::CustomRendering
             | Self::ShaderAccess
             | Self::TextureRegistration
             | Self::ModelRegistration
             | Self::CustomScreens
-            | Self::HudModification => &[Permission::Render],
+            | Self::HudModification => &[Permission::ModifyRendering],
             Self::Input | Self::InputInterception | Self::CameraControl => &[Permission::Input],
             _ => &[],
         }
@@ -512,7 +512,13 @@ pub fn check_permissions() -> Vec<(Capability, Permission)> {
     let mut missing = Vec::new();
     for capability in &manifest.capabilities {
         for permission in capability.requirements() {
-            if !manifest.permissions.contains(permission) {
+            // Compared the way the manifest may spell it, so `render` and
+            // `modify_rendering` are the same permission.
+            if !manifest
+                .permissions
+                .iter()
+                .any(|held| held.canonical() == permission.canonical())
+            {
                 missing.push((*capability, *permission));
             }
         }

@@ -419,6 +419,66 @@ impl Mod for Hello {
             config::get_errors().len(),
         );
 
+        // Section 10: what this mod may do, and what it may not.
+        info!(
+            "permissions: trust={} trusted={} declared={:?}",
+            permissions::get_trust_level(),
+            permissions::is_trusted(),
+            permissions::list_declared(),
+        );
+        info!(
+            "permissions: has(WriteFiles)={} has(ReadFiles)={} has(AccessMemory)={} has(LaunchProcesses)={}",
+            permissions::has(Permission::WriteFiles),
+            permissions::has(Permission::ReadFiles),
+            permissions::has(Permission::AccessMemory),
+            permissions::has(Permission::LaunchProcesses),
+        );
+        info!(
+            "permissions: request(RegisterCommands)={} request(AccessMemory)={} reason={:?}",
+            permissions::request(Permission::RegisterCommands),
+            permissions::request(Permission::AccessMemory),
+            permissions::denied()
+                .iter()
+                .find(|(permission, _)| *permission == Permission::AccessMemory)
+                .map(|(_, reason)| reason.clone()),
+        );
+        info!(
+            "permissions: grant(AccessMemory)={} grant(CameraControl)={} revoked(CameraControl)={} restrict(CameraControl)={} grant again={}",
+            permissions::grant(Permission::AccessMemory),
+            permissions::grant(Permission::OpenUrls),
+            permissions::revoke(Permission::OpenUrls),
+            permissions::restrict(Permission::OpenUrls),
+            permissions::grant(Permission::OpenUrls),
+        );
+        info!(
+            "permissions: prompt_user(ReadGameState)={} set_trust(Trusted)={} set_trust(Untrusted)={} now={}",
+            permissions::prompt_user(Permission::ReadGameState),
+            permissions::set_trust_level(TrustLevel::Trusted),
+            permissions::set_trust_level(TrustLevel::Untrusted),
+            permissions::get_trust_level(),
+        );
+        permissions::record_access(Permission::ReadFiles, "read the config at load");
+        info!(
+            "permissions: list={} policy={:?} for core_lib={:?} audit={} lines",
+            permissions::list().len(),
+            permissions::get_policy()
+                .iter()
+                .filter(|(permission, _)| *permission == Permission::AccessMemory
+                    || *permission == Permission::ReadFiles)
+                .map(|(permission, grant)| (permission.as_str(), grant.to_string()))
+                .collect::<Vec<_>>(),
+            permissions::list_for_mod("core_lib"),
+            permissions::get_audit_log().len(),
+        );
+        for line in permissions::report() {
+            info!("permissions: {line}");
+        }
+        info!(
+            "permissions: registered={} unregister={}",
+            permissions::register(Permission::OpenUrls),
+            permissions::unregister(Permission::OpenUrls),
+        );
+
         self.beat = Timer::every(1000);
         // A hook that cannot run yet, and one that runs as this mod is dropped.
         defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));
@@ -609,15 +669,16 @@ export_mod!(Hello, manifest = ModManifest::new("hello_mod", "Hello mod", env!("C
     .description("The worked example: one of every setting kind")
     .author("cinnaloader")
     .tag("example")
+    // A mod asking to be trusted is clamped by the loader, and this one says so out loud.
+    .trust(TrustLevel::Trusted)
     .capability(Capability::FilesystemRead)
     .capability(Capability::FilesystemWrite)
     .capability(Capability::Render)
     .capability(Capability::PlayerRead)
     .permission(Permission::ReadFiles)
     .permission(Permission::WriteFiles)
-    .permission(Permission::Render)
-    .permission(Permission::PlayerState)
-    .permission(Permission::WorldState)
+    .permission(Permission::ModifyRendering)
+    .permission(Permission::ReadPlayerData)
     .depends_on_versioned("core_lib", ">=0.1")
     .load_after("core_lib")
     .recommends("missing_lib")

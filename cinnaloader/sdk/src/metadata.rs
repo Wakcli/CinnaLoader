@@ -95,6 +95,13 @@ pub fn manifest() -> ModManifest {
     held_manifest().unwrap_or_else(|| ModManifest::new("mod", "mod", "0"))
 }
 
+/// The loader's view of this mod, or `None` when no loader answered at all — which is not
+/// the same as a loader saying this mod is disabled.
+#[must_use]
+pub fn reported() -> Option<ModInfo> {
+    crate::read_report().map(|text| ModInfo::decode(&text))
+}
+
 /// The loader's view of this mod: the declaration plus what only the loader knows.
 ///
 /// Cheap enough to call per tick, but not free — it asks the loader and parses its
@@ -116,6 +123,7 @@ pub fn report() -> ModInfo {
         reloading: false,
         entrypoint: ModEntrypoint::default(),
         loader_version: String::new(),
+        trust: manifest.trust,
         manifest,
     }
 }

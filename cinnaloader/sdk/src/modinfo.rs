@@ -132,17 +132,81 @@ impl FromStr for State {
 }
 
 /// Something a mod may not do. The inverse of [`Capability`], for mods that spell out
-/// what they will not touch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// what they will not touch. The set is the wishlist's, and the seven this loader used
+/// before it are still read from a manifest that spells them the old way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Permission {
+    // game state
+    ReadGameState,
+    ModifyGameState,
+    ReadWorld,
+    ModifyWorld,
+    ReadPlayerData,
+    ModifyPlayerData,
+    ReadInventory,
+    ModifyInventory,
+    // networking
+    SendNetworkMessages,
+    InterceptPackets,
+    ModifyPackets,
+    UseSockets,
+    // files
     ReadFiles,
     WriteFiles,
+    AccessExternalFiles,
+    // the process
+    LaunchProcesses,
+    LoadNativeLibraries,
+    AccessMemory,
+    AccessSystemInformation,
+    // the display and input
+    ModifyRendering,
+    // commands
+    RegisterCommands,
+    ExecuteCommands,
+    // the desktop
+    AccessClipboard,
+    OpenUrls,
+    // what this loader used to call the same things
     Network,
     PlayerState,
     WorldState,
     Render,
     Input,
 }
+
+/// Every permission this loader knows about.
+pub const ALL_PERMISSIONS: [Permission; 29] = [
+    Permission::ReadGameState,
+    Permission::ModifyGameState,
+    Permission::ReadWorld,
+    Permission::ModifyWorld,
+    Permission::ReadPlayerData,
+    Permission::ModifyPlayerData,
+    Permission::ReadInventory,
+    Permission::ModifyInventory,
+    Permission::SendNetworkMessages,
+    Permission::InterceptPackets,
+    Permission::ModifyPackets,
+    Permission::UseSockets,
+    Permission::ReadFiles,
+    Permission::WriteFiles,
+    Permission::AccessExternalFiles,
+    Permission::LaunchProcesses,
+    Permission::LoadNativeLibraries,
+    Permission::AccessMemory,
+    Permission::AccessSystemInformation,
+    Permission::ModifyRendering,
+    Permission::RegisterCommands,
+    Permission::ExecuteCommands,
+    Permission::AccessClipboard,
+    Permission::OpenUrls,
+    Permission::Network,
+    Permission::PlayerState,
+    Permission::WorldState,
+    Permission::Render,
+    Permission::Input,
+];
 
 impl fmt::Display for Permission {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -155,8 +219,30 @@ impl Permission {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::ReadGameState => "read_game_state",
+            Self::ModifyGameState => "modify_game_state",
+            Self::ReadWorld => "read_world",
+            Self::ModifyWorld => "modify_world",
+            Self::ReadPlayerData => "read_player_data",
+            Self::ModifyPlayerData => "modify_player_data",
+            Self::ReadInventory => "read_inventory",
+            Self::ModifyInventory => "modify_inventory",
+            Self::SendNetworkMessages => "send_network_messages",
+            Self::InterceptPackets => "intercept_packets",
+            Self::ModifyPackets => "modify_packets",
+            Self::UseSockets => "use_sockets",
             Self::ReadFiles => "read_files",
             Self::WriteFiles => "write_files",
+            Self::AccessExternalFiles => "access_external_files",
+            Self::LaunchProcesses => "launch_processes",
+            Self::LoadNativeLibraries => "load_native_libraries",
+            Self::AccessMemory => "access_memory",
+            Self::AccessSystemInformation => "access_system_information",
+            Self::ModifyRendering => "modify_rendering",
+            Self::RegisterCommands => "register_commands",
+            Self::ExecuteCommands => "execute_commands",
+            Self::AccessClipboard => "access_clipboard",
+            Self::OpenUrls => "open_urls",
             Self::Network => "network",
             Self::PlayerState => "player_state",
             Self::WorldState => "world_state",
@@ -164,21 +250,66 @@ impl Permission {
             Self::Input => "input",
         }
     }
+
+    /// What it lets a mod do, in one line, for a panel that asks the user.
+    #[must_use]
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::ReadGameState => "read the game's state: time, weather, mode",
+            Self::ModifyGameState => "change the game's state",
+            Self::ReadWorld => "read the world",
+            Self::ModifyWorld => "change the world",
+            Self::ReadPlayerData => "read the local player's data",
+            Self::ModifyPlayerData => "change the local player's data",
+            Self::ReadInventory => "read inventories",
+            Self::ModifyInventory => "change inventories",
+            Self::SendNetworkMessages => "send network messages",
+            Self::InterceptPackets => "watch packets",
+            Self::ModifyPackets => "rewrite packets",
+            Self::UseSockets => "open sockets",
+            Self::ReadFiles => "read files",
+            Self::WriteFiles => "write files",
+            Self::AccessExternalFiles => "reach outside its own directory",
+            Self::LaunchProcesses => "start other programs",
+            Self::LoadNativeLibraries => "load more native code",
+            Self::AccessMemory => "read and write the process's memory",
+            Self::AccessSystemInformation => "read system information",
+            Self::ModifyRendering => "change how the game draws",
+            Self::RegisterCommands => "register commands",
+            Self::ExecuteCommands => "run commands",
+            Self::AccessClipboard => "read and write the clipboard",
+            Self::OpenUrls => "open links",
+            Self::Network => "send and receive network traffic",
+            Self::PlayerState => "read the local player's state",
+            Self::WorldState => "read the world's state",
+            Self::Render => "draw into the HUD",
+            Self::Input => "read input",
+        }
+    }
+
+    /// Whether it is the same as the permission a mod spelled an older way.
+    #[must_use]
+    pub fn canonical(self) -> Self {
+        match self {
+            Self::Network => Self::UseSockets,
+            Self::PlayerState => Self::ReadPlayerData,
+            Self::WorldState => Self::ReadGameState,
+            Self::Render => Self::ModifyRendering,
+            Self::Input => Self::ReadGameState,
+            other => other,
+        }
+    }
 }
 
 impl FromStr for Permission {
     type Err = ();
     fn from_str(text: &str) -> Result<Self, ()> {
-        match text {
-            "read_files" => Ok(Self::ReadFiles),
-            "write_files" => Ok(Self::WriteFiles),
-            "network" => Ok(Self::Network),
-            "player_state" => Ok(Self::PlayerState),
-            "world_state" => Ok(Self::WorldState),
-            "render" => Ok(Self::Render),
-            "input" => Ok(Self::Input),
-            _ => Err(()),
-        }
+        let text = text.trim().to_ascii_lowercase();
+        ALL_PERMISSIONS
+            .iter()
+            .copied()
+            .find(|permission| permission.as_str() == text)
+            .ok_or(())
     }
 }
 
@@ -445,6 +576,8 @@ pub struct ModManifest {
     pub environment: Environment,
     pub capabilities: Vec<Capability>,
     pub permissions: Vec<Permission>,
+    /// The trust level the mod asks for. The loader clamps it: see [`crate::permissions`].
+    pub trust: crate::permissions::TrustLevel,
     pub build: BuildInfo,
     /// Loader versions this mod accepts.
     pub requires_loader: VersionReq,
@@ -497,6 +630,7 @@ impl ModManifest {
             environment: Environment::Client,
             capabilities: Vec::new(),
             permissions: Vec::new(),
+            trust: crate::permissions::TrustLevel::default(),
             build: BuildInfo {
                 development: cfg!(debug_assertions),
                 ..BuildInfo::default()
@@ -754,6 +888,13 @@ impl ModManifest {
         self
     }
 
+    /// Asks for a trust level. The loader clamps anything above [`TrustLevel::Normal`],
+    /// because a mod asking to be trusted is exactly the thing not to trust.
+    pub fn trust(mut self, trust: crate::permissions::TrustLevel) -> Self {
+        self.trust = trust;
+        self
+    }
+
     #[must_use]
     pub fn build(mut self, build: BuildInfo) -> Self {
         self.build = build;
@@ -805,6 +946,7 @@ impl ModManifest {
             environment: overlay.environment,
             capabilities: join(&self.capabilities, &overlay.capabilities),
             permissions: join(&self.permissions, &overlay.permissions),
+            trust: self.trust.max(overlay.trust),
             build: overlay.build.clone(),
             requires_loader: overlay.requires_loader.clone(),
             requires_api: self.requires_api.max(overlay.requires_api),
@@ -874,6 +1016,7 @@ impl ModManifest {
         for permission in &self.permissions {
             push("permission", permission.as_str());
         }
+        push("trust", self.trust.as_str());
         if let Some(number) = self.build.number {
             push("build_number", &number.to_string());
         }
@@ -963,6 +1106,11 @@ impl ModManifest {
                         manifest.capabilities.push(capability);
                     }
                 }
+                "trust" => {
+                    if let Ok(trust) = text.parse() {
+                        manifest.trust = trust;
+                    }
+                }
                 "permission" => {
                     if let Ok(permission) = text.parse() {
                         manifest.permissions.push(permission);
@@ -1024,6 +1172,8 @@ pub struct ModInfo {
     pub entrypoint: ModEntrypoint,
     /// The loader's own version, for a mod that needs to gate on it.
     pub loader_version: String,
+    /// The trust level the loader enforces, which is what a mod is held to.
+    pub trust: crate::permissions::TrustLevel,
 }
 
 /// The loader's answer, as one line per field. See [`ModInfo::decode`].
@@ -1084,6 +1234,7 @@ impl ModInfo {
         }
         push("entrypoint", &self.entrypoint.init);
         push("loader_version", &self.loader_version);
+        push("trust", self.trust.as_str());
         out
     }
 
@@ -1100,6 +1251,7 @@ impl ModInfo {
             library: None,
             entrypoint: ModEntrypoint::default(),
             loader_version: String::new(),
+            trust: crate::permissions::TrustLevel::default(),
         };
         for line in text.lines() {
             let Some((key, value)) = line.split_once('=') else {
@@ -1114,6 +1266,11 @@ impl ModInfo {
                 "reloading" => info.reloading = value == "1" || value == "true",
                 "library" => info.library = Some(PathBuf::from(&value)),
                 "loader_version" => info.loader_version = value,
+                "trust" => {
+                    if let Ok(trust) = value.parse() {
+                        info.trust = trust;
+                    }
+                }
                 _ => {}
             }
         }
@@ -1354,8 +1511,10 @@ mod tests {
             library: Some(PathBuf::from("/mods/libsprint.so")),
             entrypoint: ModEntrypoint::default(),
             loader_version: "0.1.0".to_owned(),
+            trust: crate::permissions::TrustLevel::Restricted,
         };
         let decoded = ModInfo::decode(&info.encode());
+        assert_eq!(decoded.trust, crate::permissions::TrustLevel::Restricted);
         assert_eq!(decoded.state, State::Disabled);
         assert!(!decoded.enabled);
         assert_eq!(decoded.namespace().scope("speed"), "sprint:speed");
