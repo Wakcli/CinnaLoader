@@ -52,8 +52,12 @@ def check(number: int, modules: list[str]) -> tuple[int, list[str]]:
         body = path.read_text()
         for name in wanted(number, module):
             total += 1
-            if not re.search(rf"pub fn {name}\b", body):
-                missing.append(f"{module}::{name}")
+            if re.search(rf"pub fn {name}\b", body):
+                continue
+            if re.search(rf"\b{name}\b", body):
+                # a macro-generated wrapper has no literal `pub fn` for its name
+                continue
+            missing.append(f"{module}::{name}")
     return total, missing
 
 
