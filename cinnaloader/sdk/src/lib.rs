@@ -81,6 +81,7 @@ pub mod shaders;
 pub mod storage;
 pub mod tasks;
 pub mod textures;
+pub mod ui;
 pub mod version;
 pub mod world;
 pub mod worldgen;
@@ -1347,6 +1348,9 @@ pub mod prelude {
     pub use crate::textures::{
         self as textures, AnimationFrame, Atlas, Filter, Sprite, Texture, TextureFormat,
         WrapMode,
+    };
+    pub use crate::ui::{
+        self as ui, Layout, Screen, UiState, Widget, WidgetKind,
     };
     pub use crate::world::{
         self as world, dimensions, AmbientProperties, DimensionDescription, DimensionKind,

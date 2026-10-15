@@ -71,7 +71,7 @@ guide, not a contract.
 | 33 | Texture and sprite APIs | 29 | todo |
 | 34 | Models and animations | 50 | todo |
 | 35 | HUD and overlays | 32 | done | Elements with alignment, anchor, scale, opacity, layers, z index and priority, with real placement maths against the screen size; a flush draws the text on the overlay and counts the rest |
-| 36 | GUI and screen system | 45 | todo |
+| 36 | GUI and screen system | 45 | done | Screens with a real stack, widgets with focus/hover and three real layouts (vertical, horizontal, grid), theme/style/scale/clip, input capture, cursor and tooltips; the client's screen layer refused |
 | 37 | GUI widget library | 47 | todo |
 | 38 | Input handling | 58 | todo |
 | 39 | Camera APIs | 39 | todo |
@@ -736,6 +736,30 @@ animation. Verified in a run of the loader with the mod attached: elements place
 `(4, 4, 90, 12)` and at the bottom right, moved and scaled to `(8, 8, 150, 21)`, a hit test
 that found the pointer inside, two elements drawn and none undrawn, and the layer, tooltip,
 handler and invalidation calls all answering.
+
+### 36 — GUI and screen system
+
+A mod can build a whole screen here, and the parts that matter are real: screens with an id
+and a title, a stack that pushes, pops and tells you the current and previous screen, widgets
+with a kind, a label, a size and a parent, `create_widget`/`register_widget`/
+`unregister_widget`/`get_widget`/`remove_widget`/`find_widget`, focus that moves and clears,
+hover from a real hit test against the placed rectangles, and `get_root_widget`.
+
+The layouts do actual arithmetic: absolute leaves each widget where it says, vertical stacks
+them down the screen from the padding with the spacing, horizontal lays them across, and a
+grid wraps them into columns — all clamped so a screen smaller than its own padding produces
+zero-size rectangles rather than negative ones. Theme, style, scale, clip area, input capture,
+cursor and tooltips are the mod's own state, and `request_layout`/`invalidate`/`rebuild`
+count what a mod asked for.
+
+Refused: `open_screen`, `close_screen`, `replace_screen` and a widget handler being called by
+the client, with the reason that the client's screen layer is its own and the loader's panel
+is the loader's rather than a mod's.
+
+Verified in a run of the loader with the mod attached: the stack pushing Settings over Hello
+and popping back, the vertical layout placing three widgets at y = 4, 26 and 48, the grid
+wrapping the third onto row two, focus moving and clearing, a hover hit test finding
+`hello:play` at (50, 20), and every client call refused.
 
 ## Open: a wild jump on the first frame
 

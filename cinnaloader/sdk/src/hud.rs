@@ -22,7 +22,7 @@
 //!     .alignment(Alignment::TopLeft)
 //!     .layer("hello:info"));
 //! hud::set_screen_size((1280, 720));
-//! assert_eq!(hud::get_bounds("hello:coords").map(|b| b.0), Some((4.0, 4.0)));
+//! assert_eq!(hud::get_bounds("hello:coords").map(|b| (b.0, b.1)), Some((4.0, 4.0)));
 //! assert_eq!(hud::flush().0, 1, "the text goes on the overlay");
 //! ```
 

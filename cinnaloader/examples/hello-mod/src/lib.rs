@@ -2939,6 +2939,105 @@ impl Mod for Hello {
             );
         });
 
+        // Section 36: screens and widgets a mod owns, and the client's screen layer.
+        tasks::schedule_after_ticks(54, move || {
+            if !demo(36) {
+                return;
+            }
+            info!(
+                "ui: register={} settings={} screens={}",
+                ui::register_screen(
+                    ui::Screen::new("hello:menu", "Hello")
+                        .widget(ui::Widget::label("hello:title", "Welcome").sized(200.0, 20.0))
+                        .widget(ui::Widget::button("hello:play", "Play").sized(100.0, 20.0))
+                        .widget(ui::Widget::label("hello:note", "a note"))
+                        .theme("hello:dark")
+                        .scale(2.0)
+                ),
+                ui::register_screen(ui::Screen::new("hello:settings", "Settings")),
+                ui::get_screens().len(),
+            );
+            info!(
+                "ui: stack push={} current={:?} previous={:?} stack={:?}",
+                ui::push_screen("hello:menu"),
+                ui::get_current_screen(),
+                ui::get_previous_screen(),
+                ui::get_screen_stack(),
+            );
+            info!(
+                "ui: push_settings={} current={:?} previous={:?} pop={:?} current_now={:?}",
+                ui::push_screen("hello:settings"),
+                ui::get_current_screen(),
+                ui::get_previous_screen(),
+                ui::pop_screen(),
+                ui::get_current_screen(),
+            );
+            info!(
+                "ui: layout absolute={:?}",
+                ui::get_layout("hello:menu").map(|(placed, layout)| (layout, placed.len())),
+            );
+            ui::set_layout("hello:menu", ui::Layout::Vertical);
+            info!(
+                "ui: layout vertical={:?}",
+                ui::get_layout("hello:menu").map(|(placed, _)| placed),
+            );
+            ui::set_layout("hello:menu", ui::Layout::Grid(2));
+            info!(
+                "ui: layout grid={:?}",
+                ui::get_layout("hello:menu").map(|(placed, _)| placed),
+            );
+            ui::set_layout("hello:menu", ui::Layout::Absolute);
+            info!(
+                "ui: widget={:?} focus={} focused={:?} set_focus={} clear={}",
+                ui::get_widget("hello:menu", "hello:play").map(|widget| widget.to_string()),
+                ui::set_focus("hello:menu", "hello:play"),
+                ui::get_focused_widget(),
+                ui::set_focus("hello:menu", "hello:title"),
+                ui::clear_focus(),
+            );
+            info!(
+                "ui: hover at 50,20={:?} hovered={:?} find={} root={:?} register_widget={}",
+                ui::update_hover("hello:menu", (1280.0, 720.0), (50.0, 20.0)),
+                ui::get_hovered_widget(),
+                ui::find_widget("hello:menu", "hello:").len(),
+                ui::get_root_widget("hello:menu"),
+                ui::register_widget("hello:menu", ui::Widget::label("hello:extra", "extra")),
+            );
+            info!(
+                "ui: theme={:?} style={} scale={} clip={} cursor={} tooltip={:?}",
+                ui::get_theme("hello:menu"),
+                ui::set_style("hello:menu", "flat"),
+                ui::set_scale("hello:menu", 1.0),
+                ui::set_clip_area("hello:menu", (0.0, 0.0, 100.0, 50.0)),
+                ui::set_cursor("hello:hand"),
+                ui::show_tooltip("press me", 10.0, 20.0),
+            );
+            info!(
+                "ui: input capture={} capturing={} release={} modal={} dialog={} menu={}",
+                ui::capture_input(),
+                ui::is_capturing_input(),
+                ui::release_input(),
+                ui::register_modal("hello:menu"),
+                ui::register_dialog("hello:menu"),
+                ui::register_context_menu("hello:menu"),
+            );
+            info!(
+                "ui: counts={:?} rebuild={} unregister={} widget={}",
+                ui::get_counts(),
+                ui::rebuild(),
+                ui::unregister_screen("hello:settings"),
+                ui::unregister_widget("hello:menu", "hello:extra"),
+            );
+            info!(
+                "ui: client-side: open={} close={} replace={} handler={} refusals={:?}",
+                ui::open_screen("hello:menu"),
+                ui::close_screen(),
+                ui::replace_screen("hello:menu"),
+                ui::register_widget_handler("hello:menu", "hello:play"),
+                ui::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",
