@@ -57,6 +57,7 @@ pub mod metadata;
 pub mod modinfo;
 pub mod mods;
 pub mod permissions;
+pub mod resources;
 pub mod storage;
 pub mod tasks;
 pub mod version;
@@ -1250,6 +1251,11 @@ pub mod prelude {
     pub use crate::mods;
     pub use crate::permissions::{
         self as permissions, AuditEntry, AuditKind, Grant, TrustLevel,
+    };
+    pub use crate::resources::{
+        self as resources, Provider, ResourceDependency, ResourceId, ResourceKind,
+        ResourceLocation, ResourceManager, ResourceMetadata, ResourceOverride, ResourcePack,
+        ResourceReloadListener, ResourceStack,
     };
     pub use crate::storage::{
         self as storage, Format, Namespace, Storage, StoreError, StoreTransaction,

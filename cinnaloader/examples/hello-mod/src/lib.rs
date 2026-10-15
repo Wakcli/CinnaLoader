@@ -607,6 +607,90 @@ impl Mod for Hello {
         );
         storage::close();
 
+        // Section 12: resources by id, over a stack of packs.
+        let mut own = ResourcePack::memory("hello-demo", 5).namespace("hello");
+        own.insert("textures/gui/menu.png", b"png bytes".to_vec());
+        own.insert("lang/en_us.txt", b"greeting=hi there".to_vec());
+        resources::register_pack(own);
+        let mut weaker = ResourcePack::memory("hello-weaker", 1).namespace("hello");
+        weaker.insert("lang/en_us.txt", b"greeting=low priority".to_vec());
+        resources::register_pack(weaker);
+        let mut overlay = ResourcePack::memory("hello-overlay", 20).namespace("hello");
+        overlay.insert("data/thing.json", b"{\"overlay\":true}".to_vec());
+        resources::register_pack(overlay);
+        info!(
+            "resources: registered={} packs={:?} stack={:?}",
+            resources::register(
+                &"hello:textures/extra.png".parse().unwrap_or_else(|_| unreachable!()),
+                b"registered at runtime".to_vec()
+            ),
+            resources::get_active_packs(),
+            resources::get_resource_stack(),
+        );
+        let menu = "hello:textures/gui/menu.png".parse::<ResourceId>().ok();
+        let lang = "hello:lang/en_us.txt".parse::<ResourceId>().ok();
+        info!(
+            "resources: exists={:?} text={:?} bytes={:?} metadata={:?}",
+            menu.as_ref().map(resources::exists),
+            lang.as_ref().and_then(resources::read_text),
+            lang.as_ref().and_then(resources::read_bytes).map(|bytes| bytes.len()),
+            menu.as_ref().and_then(resources::metadata),
+        );
+        info!(
+            "resources: list={} find={} overrides={:?}",
+            resources::list("hello").len(),
+            resources::find("hello:lang/*").len(),
+            resources::get_overrides()
+                .into_iter()
+                .map(|over| over.id.to_string())
+                .collect::<Vec<_>>(),
+        );
+        info!(
+            "resources: namespaces={:?} priorities={:?} set_priority={} now={:?}",
+            resources::get_namespace(&lang.clone().unwrap()),
+            [
+                resources::get_priority("hello-overlay"),
+                resources::get_priority("hello-demo"),
+            ],
+            resources::set_priority("hello-weaker", 30),
+            resources::get_priority("hello-weaker"),
+        );
+        let fired = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let counter = std::sync::Arc::clone(&fired);
+        resources::add_reload_listener("hello:cache", &["hello"], move || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        });
+        resources::watch(&lang.clone().unwrap(), |id| info!("resources: watched {id} reload"));
+        info!(
+            "resources: reload={} namespace reload={} listeners={:?} fired={} count={}",
+            resources::reload(),
+            resources::reload_namespace("hello"),
+            resources::get_reload_listeners(),
+            fired.load(std::sync::atomic::Ordering::Relaxed),
+            resources::reload_count(),
+        );
+        resources::depend(ResourceDependency {
+            id: "hello:textures/absent.png".parse().unwrap(),
+            required_by: "hello-mod".to_owned(),
+            optional: false,
+        });
+        info!(
+            "resources: validate={:?} missing={:?} errors={:?}",
+            resources::validate(),
+            resources::get_missing_resources()
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect::<Vec<_>>(),
+            resources::get_loading_errors().len(),
+        );
+        info!(
+            "resources: own_pack={:?} assets={:?} unregister={:?} unregister_pack={:?}",
+            resources::own_pack().map(|pack| pack.name),
+            resources::assets_directory().is_some(),
+            menu.as_ref().map(resources::unregister),
+            resources::unregister_pack("hello-overlay"),
+        );
+
         self.beat = Timer::every(1000);
         // A hook that cannot run yet, and one that runs as this mod is dropped.
         defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));

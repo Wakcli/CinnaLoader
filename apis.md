@@ -47,7 +47,7 @@ guide, not a contract.
 | 9 | Configuration system | 42 | done | Typed values with a schema, constraints, migrations, watchers, transactions and import/export/backup. Saved in `<config_dir>/config.ini` |
 | 10 | Mod permissions and sandboxing | 16 | done | The wishlist's 29 permissions with a policy that names what this host can enforce and what it cannot. A mod cannot raise its own trust, and the loader clamps what a manifest claims |
 | 11 | Filesystem and storage | 47 | done | `fs::*` rooted in the mod's own directory (escapes refused) and a key/value `storage::*` beside its config |
-| 12 | Resource and asset management | 24 | todo |
+| 12 | Resource and asset management | 24 | done | Packs by namespace with priorities, overrides, reload listeners and a per-mod `assets/` pack |
 | 13 | Localization | 21 | todo |
 | 14 | Game and session state | 33 | todo |
 | 15 | World and dimension APIs | 56 | todo |
@@ -262,6 +262,30 @@ refused (`Outside("../outside.txt")`, `Outside("/etc/cinnaloader-probe")`), a 34
 packed to 22 and back, and the store's whole surface — `open`, `set`, `flush`, `keys`, a
 namespace, a rolled-back transaction, `migrate`, `clear`, `backup`, `restore`, `stores`, a
 packed store read back, and `close`.
+
+### 12 — Resource and asset management
+
+A resource stack: packs, each with a name, a namespace and a priority, looked up by
+`namespace:path`. Two packs offering one namespace is how a resource is overridden, and
+`get_overrides` says who won and who lost. `register`/`unregister`/`get`/`find`/`list`/
+`exists`/`open`/`read`/`read_text`/`read_bytes`/`metadata` are lookups over that stack;
+`reload`/`reload_all`/`reload_namespace` run the reload listeners that asked for the
+namespace (or for everything) and re-check the stack; `validate` finds empty packs, unusable
+paths and unmet dependencies; `get_missing_resources` and `get_loading_errors` say what is
+wrong; `watch` fits a resource into the `resource_reload` event so a cache can drop.
+
+A directory pack reads a mod's own `assets/` folder through the filesystem sandbox, so it
+cannot reach outside the mod's directory, and `own_pack()` is that pack ready to register.
+
+What this host cannot do, and says so rather than pretending: feed the client's renderer.
+`TextureRegistration`, `ModelRegistration`, `ShaderAccess` and `CustomRendering` stay `Never`
+in section 10 for exactly this reason — the client's asset pipeline is its own.
+
+Verified in a live client: four packs in one namespace reported in priority order
+(`hello-overlay` 20, `hello-demo` 5, `hello-weaker` 1, `hello` 0), `hello:lang/en_us.txt`
+reported as overridden, a resource read from the winning pack with its size and hash, both a
+full reload and a namespace reload running the listener, and validation naming
+`hello:textures/absent.png` as missing.
 
 ## Already present (ABI v5)
 
