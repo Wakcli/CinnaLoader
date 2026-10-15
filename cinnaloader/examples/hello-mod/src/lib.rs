@@ -1280,6 +1280,85 @@ impl Mod for Hello {
             );
         });
 
+        // Section 19: the entity types a mod declares, and the client's entity world.
+        tasks::schedule_after_ticks(22, move || {
+            entities::register_event_kinds();
+            info!(
+                "entities: register={} type={:?}",
+                entities::register_type(
+                    EntityType::new("wisp", "Wisp")
+                        .family("mob")
+                        .family("undead")
+                        .size(0.5, 0.5)
+                        .health(8.0)
+                        .movement(0.3)
+                        .attribute("minecraft:movement", 0.3)
+                        .attribute("minecraft:follow_range", 16.0)
+                        .component(EntityComponent::new("minecraft:health", "8"))
+                        .tag("cinnaloader:spirits")
+                        .rideable(false)
+                        .hostile(false)
+                ),
+                entities::get_by_id("wisp").map(|entity| entity.to_string()),
+            );
+            info!(
+                "entities: by_name={:?} registry_id={:?} max_health={:?} living={:?} player={:?} hostile={:?} rideable={:?}",
+                entities::get_by_name("Wisp").map(|entity| entity.name),
+                entities::get_registry_id("wisp"),
+                entities::get_max_health("wisp"),
+                entities::is_living("wisp"),
+                entities::is_player("wisp"),
+                entities::is_hostile("wisp"),
+                entities::is_rideable("wisp"),
+            );
+            info!(
+                "entities: attributes={:?} one={:?} tags={:?} components={:?} has_component={} dimensions={:?} eye={:?}",
+                entities::get_attributes("wisp").keys().collect::<Vec<_>>(),
+                entities::get_attribute("wisp", "minecraft:movement"),
+                entities::get_tags("wisp"),
+                entities::get_components("wisp").len(),
+                entities::has_component("wisp", "minecraft:health"),
+                entities::get_dimensions("wisp"),
+                entities::get_eye_height("wisp"),
+            );
+            info!(
+                "entities: box={:?} distance={} squared={} events={} known={} registered_with_client={}",
+                entities::get_bounding_box("wisp", 0.0, 64.0, 0.0),
+                entities::distance((0.0, 0.0, 0.0), (3.0, 4.0, 0.0)),
+                entities::distance_squared((0.0, 0.0, 0.0), (3.0, 4.0, 0.0)),
+                entities::event_kinds().len(),
+                entities::has_event_kind("entity_spawn"),
+                entities::is_registered_with_the_client("wisp"),
+            );
+            info!(
+                "entities: live: get={:?} type={:?} position={:?} velocity={:?} health={:?} alive={:?} sneaking={:?} burning={:?} owning={:?} passengers={:?}",
+                entities::get(),
+                entities::get_type(),
+                entities::get_position(),
+                entities::get_velocity(),
+                entities::get_live_health(),
+                entities::is_alive(),
+                entities::is_sneaking(),
+                entities::is_burning(),
+                entities::get_owner(),
+                entities::get_passengers().len(),
+            );
+            info!(
+                "entities: change: spawn={} damage={} teleport={} mount={} glowing={} attribute={}",
+                entities::spawn("wisp", 0.0, 64.0, 0.0),
+                entities::damage(1.0),
+                entities::teleport(0.0, 64.0, 0.0),
+                entities::mount("horse"),
+                entities::set_glowing(true),
+                entities::set_attribute("minecraft:movement", 0.5),
+            );
+            info!(
+                "entities: refusals={:?} unregister={}",
+                entities::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                entities::unregister_type("wisp"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

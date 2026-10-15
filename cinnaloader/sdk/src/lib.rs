@@ -50,6 +50,7 @@ pub mod compat;
 pub mod config;
 pub mod deps;
 pub mod diagnostics;
+pub mod entities;
 pub mod events;
 pub mod fs;
 pub mod game;
@@ -1253,6 +1254,9 @@ pub mod prelude {
         CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
         LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
         ResolutionErrorKind, SoftDependency, VersionedDependency,
+    };
+    pub use crate::entities::{
+        self as entities, EntityComponent, EntitySize, EntityType,
     };
     pub use crate::events::{
         self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,

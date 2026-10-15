@@ -54,7 +54,7 @@ guide, not a contract.
 | 16 | Block APIs | 50 | done | Block types mods declare (properties, hardness, shapes, tool, drops, behaviour) plus every world question refused with a reason |
 | 17 | Item APIs | 47 | done | `ItemStack` is a real value here (create/clone/copy/split/merge/count/name/lore/damage/enchants/components); the client's item registry and the hand are refused with reasons. `get_model` is `n/a`: Bedrock draws an icon, not a model graph |
 | 18 | Inventory and containers | 50 | done | An `Inventory` value with the client's own slot layout (0-8 hotbar, 9-35 main, 36 offhand, 37-40 armour) and every slot operation; live slots and containers refused with reasons |
-| 19 | Entity system | 82 | todo |
+| 19 | Entity system | 82 | done | Entity types mods declare (families, size, health, attributes, components) with the client's live entity world refused name by name, and 18 entity event kinds registered |
 | 20 | Entity components and attributes | 27 | todo |
 | 21 | Player APIs | 65 | todo |
 | 22 | Status effects and damage | 29 | todo |
@@ -337,6 +337,29 @@ Bedrock client has no viewer list, that is a server idea.
 Verified in a live client: 164 stone across three slots, a split of 20, a move that took 44,
 a transaction rolled back to 144, a lock refusing a write until it was unlocked, the whole
 live surface `None`/`false`, and a declared crate read back with its 27 slots.
+
+### 19 — Entity system
+
+Every question about a *live* entity is refused with a reason, and the reasons are specific:
+the client's entity store is the only place an entity exists (`lookup`), position and rotation
+come from its own interpolation (`position`, `movement`), flags like sneaking and burning are
+applied by the client (`state`), health arrives from the server (`health`), attributes and
+components are what the client syncs (`attribute`, `component`), families are server data
+(`tag`), owners, riders and targets are not synced to a Bedrock client in general
+(`ownership`), and spawning, damaging, killing, teleporting, mounting are the server's
+(`change`) — the client can only ask, and this host cannot even ask. Presentation
+(`set_glowing`, name tags) is the client's own layer. `is_ai_controlled` is `None` rather
+than a guess: for everything but the local player it would be made up.
+
+What *is* real: a mod declares an entity type — families, size, health, movement, attributes,
+components, tags, whether it is rideable and whether it is hostile — and every mod reads that
+registry, along with the arithmetic that is pure once a mod has its own numbers:
+`bounding_box_at`, `distance`, `distance_squared`, `eye_height`. The eighteen entity event
+kinds are registered on the section 6 bus for the day the hooks land.
+
+Verified in a live client: a wisp declared and read back with its size, health, both
+attributes, families and component; its bounding box at a position; and every live question
+`None` with spawn, damage, teleport, mount, glowing and attribute changes all refused.
 
 ## Open: a wild jump on the first frame
 
