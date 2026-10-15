@@ -67,7 +67,7 @@ def candidates():
         if text is not None:
             found.append((ref, text))
     local = ROOT / FILE
-    if local.exists():
+    if INCLUDE_LOCAL and local.exists():
         found.append(("working tree", local.read_text()))
     return found
 
