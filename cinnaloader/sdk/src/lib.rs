@@ -47,6 +47,7 @@ use std::{
 pub mod capability;
 pub mod compat;
 pub mod deps;
+pub mod events;
 pub mod lifecycle;
 pub mod metadata;
 pub mod modinfo;
@@ -923,6 +924,10 @@ pub fn load_body<T: Mod>(module: &mut T) -> i32 {
         }
     }
     lifecycle::record_version(&metadata::manifest().version);
+    // Fired after `load` rather than before it, so a mod that subscribes while loading
+    // still hears that the game started.
+    events::publish(events::Event::new(events::kind::GAME_STARTED).with_text(&metadata::id()));
+    events::dispatch_pending();
     0
 }
 
@@ -943,11 +948,58 @@ pub fn frame_body<T: Mod>(module: &mut T, dt_millis: u32, first: bool) -> i32 {
     guarded(module, "tick", |module| {
         while let Some((kind, id, value)) = take_event() {
             match kind.as_str() {
-                "toggle" => module.toggle(&id, value == "1"),
-                "number" => module.slider(&id, value.parse().unwrap_or_default()),
-                "choice" => module.choice(&id, value.parse().unwrap_or_default()),
-                "keybind" => module.keybind(&id, value == "1"),
-                "press" => module.pressed(&id),
+                "toggle" => {
+                    events::publish(
+                        events::Event::new(events::kind::SETTINGS_CHANGED)
+                            .with_text(&format!("{id}={value}")),
+                    );
+                    module.toggle(&id, value == "1");
+                }
+                "number" => {
+                    events::publish(
+                        events::Event::new(events::kind::SETTINGS_CHANGED)
+                            .with_value(value.parse().unwrap_or_default())
+                            .with_text(&id),
+                    );
+                    module.slider(&id, value.parse().unwrap_or_default());
+                }
+                "choice" => {
+                    events::publish(
+                        events::Event::new(events::kind::SETTINGS_CHANGED)
+                            .with_count(value.parse().unwrap_or_default())
+                            .with_text(&id),
+                    );
+                    module.choice(&id, value.parse().unwrap_or_default());
+                }
+                "keybind" => {
+                    events::publish(
+                        events::Event::cancellable(events::kind::INPUT)
+                            .with_flag(value == "1")
+                            .with_text(&id),
+                    );
+                    module.keybind(&id, value == "1");
+                }
+                "press" => {
+                    events::publish(
+                        events::Event::cancellable(events::kind::INPUT)
+                            .with_flag(true)
+                            .with_text(&id),
+                    );
+                    module.pressed(&id);
+                }
+                "enabled" | "disabled" => {
+                    let on = kind == "enabled";
+                    events::publish(
+                        events::Event::new(if on {
+                            events::kind::MOD_ENABLED
+                        } else {
+                            events::kind::MOD_DISABLED
+                        })
+                        .with_flag(on)
+                        .with_text(&id)
+                        .from(&id),
+                    );
+                }
                 _ => {}
             }
         }
@@ -1152,6 +1204,9 @@ pub mod prelude {
         CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
         LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
         ResolutionErrorKind, SoftDependency, VersionedDependency,
+    };
+    pub use crate::events::{
+        self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,
     };
     pub use crate::mods;
     pub use crate::lifecycle::{

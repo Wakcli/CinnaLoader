@@ -4,6 +4,13 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use cinnaloader::prelude::*;
 
+/// Ticks seen, for a log line that would otherwise repeat every frame.
+static TICKS: AtomicU32 = AtomicU32::new(0);
+
+fn self_ticks() -> u32 {
+    TICKS.load(Ordering::Relaxed)
+}
+
 #[derive(Default)]
 struct Hello {
     ticks: AtomicU32,
@@ -89,6 +96,71 @@ impl Mod for Hello {
         keybind("panic", "Panic (turn everything off)", "Debug", "P");
         button("reset", "Reset settings", "Debug");
 
+        // Section 6: the events the loader fires for this mod, and the ones it queues.
+        events::register_event_type("hello:ready");
+        events::subscribe(kind::GAME_STARTED, Priority::Low, |_| {
+            info!("event: game_started");
+        });
+        events::subscribe(kind::MOD_LOADED, Priority::Normal, |_| {
+            info!("event: mod_loaded");
+        });
+        events::subscribe(kind::CLIENT_TICK, Priority::Monitor, |_| {
+            if self_ticks() < 3 {
+                info!("event: client_tick #{}", self_ticks());
+            }
+        });
+        events::subscribe_once(kind::CLIENT_TICK, Priority::Highest, |_| {
+            info!("event: first client_tick");
+        });
+        events::subscribe(kind::RENDER_TICK, Priority::Low, |event| {
+            if self_ticks() < 3 {
+                info!("event: render_tick flag={:?}", event.flag());
+            }
+        });
+        events::subscribe(kind::INPUT, Priority::Highest, |event| {
+            info!("event: input {} down={:?}", event.text().unwrap_or("?"), event.flag());
+            if event.text() == Some("hello_mod:panic") {
+                events::stop_propagation();
+                info!("event: propagation stopped before the lower priorities");
+            }
+        });
+        events::subscribe_filtered(
+            kind::MOD_DISABLED,
+            Priority::Normal,
+            |_| true,
+            |event| {
+                info!(
+                    "event: mod_disabled for {}, running again={}",
+                    event.text().unwrap_or("?"),
+                    mods::is_enabled("hello_mod"),
+                );
+            },
+        );
+        events::subscribe(kind::MOD_ENABLED, Priority::Normal, |event| {
+            info!("event: mod_enabled for {}", event.text().unwrap_or("?"));
+        });
+        events::subscribe("hello:ready", Priority::Normal, |event| {
+            info!(
+                "event: hello:ready delivered late, carrying {:?} from {}",
+                event.text(),
+                event.source(),
+            );
+        });
+        let queued = events::subscribe(kind::GAME_TICK_END, Priority::Normal, |event| {
+            info!("event: game_tick_end carried {:?}", event.payload());
+        });
+        info!(
+            "events: listeners(CLIENT_TICK)={} order={:?} kinds={} queued_id={queued}",
+            events::get_listener_count(kind::CLIENT_TICK),
+            events::get_event_order(kind::CLIENT_TICK)
+                .into_iter()
+                .map(|info| (info.priority.as_str(), info.once))
+                .collect::<Vec<_>>(),
+            events::known_kinds().len(),
+        );
+        // A posted event waits for the end of the tick; a published one runs now.
+        events::post(events::Event::new("hello:ready").with_text("queued during load"));
+
         self.beat = Timer::every(1000);
         // A hook that cannot run yet, and one that runs as this mod is dropped.
         defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));
@@ -156,6 +228,17 @@ impl Mod for Hello {
 
     fn tick(&mut self, dt_millis: u32) {
         let tick = self.ticks.fetch_add(1, Ordering::Relaxed) + 1;
+        TICKS.store(tick, Ordering::Relaxed);
+        // Twice through the tick counter: the mod switches itself off, and core_lib
+        // switches it back on, which is how the enable and disable events get delivered.
+        if tick == 5 {
+            info!(
+                "events: switching myself off, pending={} cancelled={}",
+                events::pending_count(),
+                events::is_cancelled()
+            );
+            mods::disable("hello_mod");
+        }
         if !self.beat.ready(dt_millis) {
             return;
         }

@@ -41,7 +41,7 @@ guide, not a contract.
 | 3 | Versioning and compatibility | 35 | done | `95dc61d`. `/tmp/opencode/s3-compat.png`. 4 names have no target, see below |
 | 4 | Dependencies and mod load order | 46 | done | ABI v8. `/tmp/opencode/s4-deps.png` + the run log: order, refusal, errors |
 | 5 | Capability system | 10 | done | `Capability` grew from 8 names to the wishlist's 38, with `supported()`/`why_unsupported()` saying honestly what a mod can be given here. Verified in a live client: `held=[Render, FilesystemRead, FilesystemWrite]`, `world_read=false`, `unsupported_why=needs hooks into the client's world and entity state` |
-| 6 | Event system | 24 | todo |
+| 6 | Event system | 24 | done | Bus with phases, priorities, filters, once, cancel and stop. Fired by the loader's own phases, so an event means the phase really happened |
 | 7 | Threading and task scheduling | 32 | todo |
 | 8 | Logging and diagnostics | 38 | todo |
 | 9 | Configuration system | 42 | todo |
@@ -152,6 +152,23 @@ guide, not a contract.
 the loader resolves what every mod declared before any of them loads, so a mod cannot
 inject a rule into that check, and a "patch" would be a no-op on the version it claims to
 fix. Version matching, mapping included, lives in `compat::check`, which both sides call.
+
+### 6 — Event system
+
+The bus is per-mod and driven only by the loader's own phases: `game_started` (end of
+`load`), `mod_loaded`, `client_tick` + `game_tick_start`/`game_tick_end`, `render_tick`,
+`settings_changed`, `input`, `mod_unloaded`, `mod_enabled`/`mod_disabled`, `game_stopping`,
+`crash`. That covers what a mod running in this client can observe.
+
+The rest of the wishlist's kinds are declared and can be subscribed to, but nothing fires
+them here because the client gives no hook: `server_tick`, `world_tick`, `resource_reload`,
+`language_changed`, `screen_changed`, `focus_changed`, `window_resized`, `game_paused`,
+`game_resumed`, `command_registered`, `registry_changed`, and `mod_reloaded` (no hot reload,
+see section 4). A mod that fires one of them itself still gets it delivered.
+
+`input` is fired for this mod's own keybinds and buttons, which cannot be triggered
+headlessly, so the ordering and cancellation are proven by unit test and the delivery path
+by the settings events that share it.
 
 ### 4 — Dependencies and mod load order
 

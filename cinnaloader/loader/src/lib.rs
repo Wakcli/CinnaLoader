@@ -158,6 +158,28 @@ pub fn set_mod_enabled(name: &str, enabled: bool) {
             names.push(name.to_owned());
         }
     }
+    // The mod is told, so its own event bus can say `mod_enabled` or `mod_disabled` rather
+    // than a mod having to poll `is_enabled`.
+    queue(
+        if enabled { "enabled" } else { "disabled" },
+        name,
+        &kind_of(name),
+        String::new(),
+    );
+}
+
+/// The id a mod declared, for an event that names it.
+fn kind_of(name: &str) -> String {
+    records()
+        .lock()
+        .ok()
+        .and_then(|records| {
+            records
+                .iter()
+                .find(|record| record.name == name)
+                .map(|record| record.manifest.id.clone())
+        })
+        .unwrap_or_else(|| name.to_owned())
 }
 
 /// What a mod declared about itself, and where its library came from.
@@ -1257,7 +1279,7 @@ impl Host {
     /// Hands one lifecycle phase to every mod that answers it.
     fn walk(&mut self, phase: Phase) {
         for module in &self.mods {
-            if mod_failed(&module.name) {
+            if !mod_enabled(&module.name) || mod_failed(&module.name) {
                 continue;
             }
             let Some(phase_fn) = module.phase else {
@@ -1461,6 +1483,7 @@ mod tests {
 
     #[test]
     fn non_library_files_are_ignored() {
+        let _serial = serial();
         let dir = std::env::temp_dir().join(format!("cinnaloader-noise-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("readme.txt"), b"not a mod").unwrap();
@@ -1474,10 +1497,27 @@ mod tests {
         let _serial = serial();
         let name = format!("cinnaloader-toggle-{}", std::process::id());
         assert!(mod_enabled(&name), "mods start enabled");
+        let _ = take_queued(&name);
         set_mod_enabled(&name, false);
         assert!(!mod_enabled(&name));
+        // The mod is told, so its own bus can say `mod_disabled` without polling.
+        assert_eq!(take_queued(&name), vec![format!("disabled\t{name}\t")]);
         set_mod_enabled(&name, true);
         assert!(mod_enabled(&name));
+        assert_eq!(take_queued(&name), vec![format!("enabled\t{name}\t")]);
+    }
+
+    /// Drains the events queued for one mod, as the mod's own tick would.
+    fn take_queued(name: &str) -> Vec<String> {
+        enter_mod(name);
+        let mut buffer = [0 as c_char; 256];
+        let mut seen = Vec::new();
+        while unsafe { host_take_event(buffer.as_mut_ptr(), buffer.len()) } == 1 {
+            // SAFETY: the host wrote a NUL-terminated event line.
+            seen.push(unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_string_lossy().into_owned());
+        }
+        leave_mod();
+        seen
     }
 
     #[test]

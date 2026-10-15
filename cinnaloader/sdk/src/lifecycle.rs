@@ -213,6 +213,36 @@ pub(crate) fn enter(phase: Phase) {
         }
         _ => {}
     }
+    announce(phase);
+}
+
+/// Fires the events that go with a phase, and delivers whatever a mod queued. This is the
+/// only place the bus is driven from, so an event always means the phase really happened.
+fn announce(phase: Phase) {
+    use crate::events::{self, kind, Event};
+    let event = match phase {
+        Phase::Initialize => Event::new(kind::MOD_LOADED).with_text(&crate::metadata::id()),
+        Phase::TickStart => Event::new(kind::CLIENT_TICK),
+        Phase::TickEnd => Event::new(kind::GAME_TICK_END),
+        Phase::RenderStart => Event::new(kind::RENDER_TICK),
+        Phase::RenderEnd => Event::new(kind::RENDER_TICK).with_flag(false),
+        Phase::Unload => Event::new(kind::MOD_UNLOADED).with_text(&crate::metadata::id()),
+        Phase::Shutdown => Event::new(kind::GAME_STOPPING).with_text(&crate::metadata::id()),
+        Phase::Error => Event::new(kind::CRASH),
+        _ => return,
+    };
+    events::publish(event);
+    if matches!(phase, Phase::TickStart) {
+        // A tick is both the game's tick and the client's: this loader runs inside the
+        // client, so it fires both names for the same moment.
+        events::publish(Event::new(kind::GAME_TICK_START));
+    }
+    if matches!(phase, Phase::RenderStart) {
+        events::dispatch_render_queue();
+    }
+    if matches!(phase, Phase::TickStart | Phase::TickEnd) {
+        events::dispatch_pending();
+    }
 }
 
 /// Runs everything [`register_cleanup`] queued. The loader calls this after the mod's own
