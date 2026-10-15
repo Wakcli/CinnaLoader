@@ -75,14 +75,26 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §27 recipes, crafting and smelting (commit `51cc0c7`). Sections 1–27 are
-  done and verified in a live client; `apis.md` rows 1–27 say `done` and `checklist.md`
-  agrees. `cargo test` is green (239 tests) and `cargo clippy --all-targets` is clean.
-- **In progress:** starting §28 registries, which the research map calls the foundation for
-  §26, §27, §32, §33, §34, §35, §36 and §37.
-- **Next command:** `python3 tools/instructions.py check`, then work `## 28. Registries` from
-  `../cinnaloader-notes/SECTIONS-25-40.md` (it classifies every name in 25–40 and names the
-  traps), reusing the pattern the last ten sections follow. That file says the mostly-real sections are §27 recipes, §28
+- **Last finished:** §38 input handling (commit `de0fd8a`). Sections 1–38 are done and
+  verified in a run with the mod attached; `apis.md` rows 1–38 say `done` and `checklist.md`
+  agrees. `cargo test` is green (302 tests) and `cargo clippy --all-targets` is clean.
+- **In progress:** starting §37 GUI widget library (the widget *tree*: children, min/max
+  size, margin, padding, border, background, rotation, constraints, data, bindings and the
+  handler registrations), then §39 camera, §40 … in order.
+- **Next command:** `python3 tools/instructions.py check`, then work `## 37. GUI widget
+  library` from the wishlist (its two lists: the ~68 widget kinds and the ~47 functions),
+  reusing the pattern the last twenty sections follow.
+- **How to verify fast now, because this is the expensive part:**
+  1. `cargo build -p hello-mod` (**not** `cargo test` — that does not rebuild the cdylib, and a
+     stale `.so` has already fooled one verification run).
+  2. `cp target/debug/libhello_mod.so /tmp/cl-mods/`
+  3. `CINNALOADER_DEMO=<section> ./target/debug/cinnaloader run /tmp/cl-mods 250 20` and grep
+     for the section's log prefix. The CLI has no hooks, so it is stable; the client is the
+     better evidence when it cooperates (`CINNALOADER_DEMO=<section> python3 tools/mcp.py
+     launch sleep:24 shot:...`), and a run that dies right after `menu hooked` is the known
+     hook-layer flake rather than the section's fault.
+  4. Add the section's demonstration to `examples/hello-mod` inside
+     `tasks::schedule_after_ticks(<even tick>, move || { if !demo(<section>) { return; } … })` That file says the mostly-real sections are §27 recipes, §28
   registries, §30 rendering primitives, §34 models and animations and §39 camera, and that
   **§28 is the foundational one** for 26/27/32/33/34/35/36/37 — so if a choice has to be
   made, do §28 before the sections that build on it.
