@@ -479,6 +479,134 @@ impl Mod for Hello {
             permissions::unregister(Permission::OpenUrls),
         );
 
+        // Section 11: the mod's own files, and a key/value store beside its config.
+        info!(
+            "fs: root={:?} create={:?} write={:?}",
+            fs::root(),
+            fs::create_directories("cache"),
+            fs::write_text("cache/last-run.txt", "hello from the example"),
+        );
+        info!(
+            "fs: exists={} is_file={} is_directory={} text={:?} bytes={:?}",
+            fs::exists("cache/last-run.txt"),
+            fs::is_file("cache/last-run.txt"),
+            fs::is_directory("cache"),
+            fs::read_text("cache/last-run.txt"),
+            fs::read_bytes("cache/last-run.txt").map(|bytes| bytes.len()),
+        );
+        info!("fs: append={:?}", fs::append("cache/last-run.txt", b" again"));
+        info!(
+            "fs: escape refusals: {:?} {:?}",
+            fs::read_text("../outside.txt").err(),
+            fs::write_text("/etc/cinnaloader-probe", "no"),
+        );
+        info!(
+            "fs: copy={:?} rename={:?} size={} modified={:?}",
+            fs::copy("cache/last-run.txt", "cache/second.txt", true),
+            fs::rename("cache/second.txt", "cache/third.txt"),
+            fs::file_size("cache/third.txt"),
+            fs::modified_time("cache/third.txt").is_some(),
+        );
+        info!(
+            "fs: list={:?} walk={} metadata={:?}",
+            fs::list("cache").map(|entries| entries.len()),
+            fs::walk("cache").map(|entries| entries.len()).unwrap_or_default(),
+            fs::metadata("cache/last-run.txt").map(|meta| (meta.size, meta.is_file, meta.age().is_some())),
+        );
+        info!(
+            "fs: canonical={:?} hash={:?} identical={} delete={:?}",
+            fs::canonicalize("cache/third.txt"),
+            fs::hash("cache/third.txt"),
+            fs::identical("cache/last-run.txt", "cache/third.txt"),
+            fs::delete("cache/third.txt"),
+        );
+        info!(
+            "fs: atomic_write={:?} read back={:?}",
+            fs::atomic_write("cache/atomic.txt", b"written atomically"),
+            fs::read_text("cache/atomic.txt"),
+        );
+        let mut handle = fs::open_write("cache/streamed.txt").unwrap_or_else(|_| {
+            fs::open_read("cache/atomic.txt").expect("the file that was just written")
+        });
+        let _ = handle.write(b"streamed through a handle");
+        let _ = handle.flush();
+        info!(
+            "fs: handle path={} read back={:?}",
+            handle.path().display(),
+            fs::read_text("cache/streamed.txt"),
+        );
+        info!(
+            "fs: temp file={:?} temp dir={:?} watch={:?} watch_count={} unwatch={}",
+            fs::temporary_file(Some("cache")).map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
+            fs::temporary_directory(Some("cache")).map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
+            fs::watch("cache/atomic.txt", |path, _| info!("fs: watched {} change", path.display())).map(|_| ()),
+            fs::watch_count(),
+            fs::unwatch(1),
+        );
+        let packed = fs::compress(b"aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbcc");
+        info!(
+            "fs: compressed {} bytes to {} and back to {:?}",
+            34,
+            packed.len(),
+            fs::decompress(&packed).map(|bytes| bytes.len()),
+        );
+        info!(
+            "storage: open={:?} set={} flush={:?} keys={:?}",
+            storage::open("seen"),
+            storage::set("blocks", ConfigValue::Integer(42)),
+            storage::flush(),
+            storage::keys(""),
+        );
+        let world = storage::namespace("world");
+        world.set("spawn", ConfigValue::Text("0,64,0".to_owned()));
+        info!(
+            "storage: version={:?} get(blocks)={:?} namespaced={:?} all={}",
+            storage::version(),
+            storage::get("blocks"),
+            world.get("spawn"),
+            storage::keys("").len(),
+        );
+        let mut batch = storage::transaction().unwrap();
+        storage::set("blocks", ConfigValue::Integer(7));
+        info!("storage: inside a batch blocks={:?} rollback={}", storage::get("blocks"), batch.rollback());
+        info!("storage: after rollback blocks={:?}", storage::get("blocks"));
+        storage::set("blocks", ConfigValue::Integer(43));
+        info!(
+            "storage: migrate={:?} version={:?} delete={} contains={} clear={}",
+            storage::migrate("2", |values| {
+                if let Some(value) = values.remove("old") {
+                    values.insert("renewed".to_owned(), value);
+                }
+            }),
+            storage::version(),
+            storage::delete("nothing"),
+            storage::contains("blocks"),
+            storage::clear(),
+        );
+        storage::set("blocks", ConfigValue::Integer(44));
+        info!(
+            "storage: flush={:?} backup={:?} restore={:?} stores={:?} close={} open_database={:?}",
+            storage::flush(),
+            storage::backup().map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
+            storage::restore(),
+            storage::stores(),
+            storage::close(),
+            storage::open_database("log"),
+        );
+        info!(
+            "storage: packed open={:?} set={} flush={:?} close={}",
+            storage::open("tidy.packed"),
+            storage::set("note", ConfigValue::Text("packed".to_owned())),
+            storage::flush(),
+            storage::close(),
+        );
+        info!(
+            "storage: format round trip get={:?} stores={:?}",
+            storage::open("tidy.packed").map(|_| storage::get("note")),
+            storage::stores(),
+        );
+        storage::close();
+
         self.beat = Timer::every(1000);
         // A hook that cannot run yet, and one that runs as this mod is dropped.
         defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));

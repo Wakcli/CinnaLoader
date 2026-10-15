@@ -1333,7 +1333,12 @@ impl Host {
             .map(|records| !records.iter().any(|record| record.name == name))
             .unwrap_or(false);
         if unknown {
-            remember(&name, ModManifest::new(&name, &name, "0"), Some(path.to_owned()));
+            // Every path a mod works with is relative to its own directory, and this is the one
+        // place that decides what that is.
+        if let Some(directory) = config_dir() {
+            cinnaloader::fs::set_root(directory.join(&name));
+        }
+        remember(&name, ModManifest::new(&name, &name, "0"), Some(path.to_owned()));
         }
         entering_load(&name);
         enter_mod(&name);

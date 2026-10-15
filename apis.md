@@ -46,7 +46,7 @@ guide, not a contract.
 | 8 | Logging and diagnostics | 38 | done | Levelled log with sinks, filters, history, structured fields and error capture; a report, a health check and a capability report |
 | 9 | Configuration system | 42 | done | Typed values with a schema, constraints, migrations, watchers, transactions and import/export/backup. Saved in `<config_dir>/config.ini` |
 | 10 | Mod permissions and sandboxing | 16 | done | The wishlist's 29 permissions with a policy that names what this host can enforce and what it cannot. A mod cannot raise its own trust, and the loader clamps what a manifest claims |
-| 11 | Filesystem and storage | 47 | todo |
+| 11 | Filesystem and storage | 47 | done | `fs::*` rooted in the mod's own directory (escapes refused) and a key/value `storage::*` beside its config |
 | 12 | Resource and asset management | 24 | todo |
 | 13 | Localization | 21 | todo |
 | 14 | Game and session state | 33 | todo |
@@ -232,6 +232,36 @@ boundary: a mod can only ever narrow its own permissions or trust, and the loade
 manifest that claims `trusted` down to `normal`, telling the mod so. Verified in a live
 client: `hello_mod asked for trust trusted, which is the user's to give: clamped to normal`
 in the loader's log, and the mod itself reporting `trust=normal`.
+
+### 11 — Filesystem and storage
+
+`fs::*` is a real filesystem API with one rule: every path is relative to the mod's own
+directory, and `..`, an absolute path or a symlink out is refused with the reason. That is
+the `filesystem_read`/`filesystem_write` capability made concrete — a mod gets its own
+folder, not the user's disk — and the loader sets the root as it loads each mod.
+
+All 34 names are implemented: reading, writing, appending, copying, moving, renaming,
+deleting, creating files and directories, listing, walking, metadata, size, modified time,
+canonicalising, atomic writes through a part file and a rename, hashing (FNV-1a, said to be
+non-cryptographic), handles for streaming reads and writes, temporary files and directories,
+and a polled `watch`/`unwatch` — there is no inotify here, so a change is seen within a
+tick.
+
+`compress`/`decompress` are run-length packing in this loader's own container. It shrinks
+repeated data, leaves varied data much the same size, and the round trip is exact for any
+input; it is not a general compressor and is not described as one.
+
+`storage::*` is a key/value store per name beside the mod's config, in a text format a
+person can read (`key = value`, values rendered the way config values are), with namespaces,
+transactions, flush, backup, restore, migrate, and a packed variant for a name ending in
+`.packed`. `open_database` opens the same kind of store: this host has no SQL engine, and the
+name says key/value rather than pretending otherwise.
+
+Verified in a live client: the root reported as `/tmp/cl-mods/hello_mod`, both escapes
+refused (`Outside("../outside.txt")`, `Outside("/etc/cinnaloader-probe")`), a 34-byte buffer
+packed to 22 and back, and the store's whole surface — `open`, `set`, `flush`, `keys`, a
+namespace, a rolled-back transaction, `migrate`, `clear`, `backup`, `restore`, `stores`, a
+packed store read back, and `close`.
 
 ## Already present (ABI v5)
 
