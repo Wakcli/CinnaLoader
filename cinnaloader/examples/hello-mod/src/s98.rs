@@ -8,7 +8,7 @@ pub fn run() -> Vec<String> {
 
     let mut out = Vec::new();
     telemetry::clear();
-    telemetry::reset_consent();
+    let _ = telemetry::reset_consent();
     telemetry::set_configuration(Configuration {
         cap: 3,
         redact: vec!["player".to_owned()],
@@ -17,7 +17,7 @@ pub fn run() -> Vec<String> {
     let field = ("phase", ConfigValue::Text("load".to_owned()));
     let unset = telemetry::record_event("boot", &[field]);
     let unset_size = telemetry::get_queue_size();
-    telemetry::deny();
+    let _ = telemetry::deny();
     let field = ("phase", ConfigValue::Text("load".to_owned()));
     let denied = telemetry::record_event("boot", &[field]);
     let denied_size = telemetry::get_queue_size();
@@ -105,6 +105,6 @@ pub fn run() -> Vec<String> {
             .collect::<Vec<_>>()
     ));
 
-    telemetry::reset_consent();
+    let _ = telemetry::reset_consent();
     out
 }

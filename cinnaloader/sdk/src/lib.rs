@@ -1649,7 +1649,11 @@ pub use crate::tools::{
         Progress, BuildError as BuildBuildError
     };
     pub use crate::telemetry::{
-        self as telemetry, Consent, Event, Configuration, Preview, Aggregate
+        self as telemetry, Consent, Event as TelemetryEvent, Configuration, Preview, Aggregate
+    };
+    pub use crate::bridges::{
+        self as bridges, Adapter as BridgesAdapter, AdapterKind, ArgKind, ArgMap, Bridge, BridgeError,
+        BridgeStatus, Conflict as BridgesConflict, Foreign, MethodMap, Translation,
     };
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
@@ -1681,7 +1685,7 @@ pub use crate::tools::{
         self as statistics, Statistic, StatisticCategory, Statistics as StatStore
     };
     pub use crate::events::{
-        self as events, DispatchPhase, Event as EventsEvent, ListenerInfo, Payload, Priority, kind
+        self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind
     };
     pub use crate::fs::{self as fs, File, FsError, Metadata as FileMetadata, Watch};
     pub use crate::game::{self as game, Request, RequestOutcome, SessionInfo, Window};

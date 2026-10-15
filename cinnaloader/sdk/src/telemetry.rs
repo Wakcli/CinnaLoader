@@ -528,7 +528,7 @@ mod tests {
     fn a_recorded_event_keeps_its_name_and_typed_fields() {
         let _serial = serial();
         fresh();
-        grant();
+        let _ = grant();
         assert!(record_event(
             "combat",
             &[
@@ -547,7 +547,7 @@ mod tests {
     fn redaction_removes_a_field_and_leaves_the_rest() {
         let _serial = serial();
         fresh();
-        grant();
+        let _ = grant();
         set_configuration(Configuration {
             cap: DEFAULT_CAP,
             redact: vec!["player".to_owned()],
@@ -579,7 +579,7 @@ mod tests {
     fn the_buffer_drops_the_oldest_at_its_cap() {
         let _serial = serial();
         fresh();
-        grant();
+        let _ = grant();
         set_configuration(Configuration {
             cap: 3,
             redact: Vec::new(),
@@ -598,7 +598,7 @@ mod tests {
     fn the_aggregate_counts_names_and_never_a_value() {
         let _serial = serial();
         fresh();
-        grant();
+        let _ = grant();
         assert!(record_event(
             "boot",
             &[("secret", ConfigValue::Text("hunter2".into()))]
@@ -629,7 +629,7 @@ mod tests {
     fn the_preview_is_what_would_be_exported_with_a_byte_size() {
         let _serial = serial();
         fresh();
-        grant();
+        let _ = grant();
         assert!(record_event(
             "boot",
             &[("phase", ConfigValue::Text("play".into()))]
@@ -646,7 +646,7 @@ mod tests {
     fn sending_is_refused_with_a_sentence() {
         let _serial = serial();
         fresh();
-        grant();
+        let _ = grant();
         assert!(record_event("boot", &[]));
         let refused = flush();
         assert!(refused.is_err());
@@ -682,7 +682,7 @@ mod tests {
         });
         assert_eq!(previous, Configuration::default());
         assert_eq!(get_configuration().redact, ["secret"]);
-        grant();
+        let _ = grant();
         for name in ["a", "b", "c"] {
             assert!(record_event(name, &[]));
         }

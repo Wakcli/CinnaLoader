@@ -702,19 +702,47 @@ let block = get("minecraft:stone");
     fn the_report_names_a_declared_thing_with_no_entry() {
         let _serial = serial();
         fresh();
+        // the tools inventory is shared with every other test in this process, so this
+        // asserts the delta this test caused rather than a global count
+        fn counted(report: &str, label: &str) -> i64 {
+            report
+                .lines()
+                .find(|line| line.starts_with(&format!("- {label}: ")))
+                .and_then(|line| line.rsplit(' ').next())
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(-1)
+        }
+
         crate::tools::clear();
+        let before = generate_mod_report();
         crate::tools::register_command("hello:s90_cmd");
         assert!(register_page("hello:s90_cmd", "documented"));
 
         let report = generate_mod_report();
         assert!(report.starts_with("# Mod report\n\n"));
-        assert!(report.contains("- documented: 1\n"));
-        assert!(report.contains("- deprecated: 0\n"));
-        assert!(report.contains("- missing: 0\n"), "{report}");
+        assert_eq!(
+            counted(&report, "documented") - counted(&before, "documented"),
+            1,
+            "{report}"
+        );
+        assert_eq!(
+            counted(&report, "deprecated") - counted(&before, "deprecated"),
+            0,
+            "{report}"
+        );
+        assert_eq!(
+            counted(&report, "missing") - counted(&before, "missing"),
+            0,
+            "{report}"
+        );
 
         crate::tools::register_command("hello:s90_undocumented");
         let report = generate_mod_report();
-        assert!(report.contains("- missing: 1\n"));
+        assert_eq!(
+            counted(&report, "missing") - counted(&before, "missing"),
+            1,
+            "{report}"
+        );
         assert!(report.ends_with("- hello:s90_undocumented\n"));
     }
 
