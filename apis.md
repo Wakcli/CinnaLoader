@@ -57,7 +57,7 @@ guide, not a contract.
 | 19 | Entity system | 82 | done | Entity types mods declare (families, size, health, attributes, components) with the client's live entity world refused name by name, and 18 entity event kinds registered |
 | 20 | Entity components and attributes | 27 | done | Component types and attribute sets a mod owns (fields, validation, serialisation, modifiers applied the game's way); attaching to a live entity refused; the ECS/system names are `n/a` |
 | 21 | Player APIs | 65 | done | A `PlayerState` a mod owns (with an `Inventory` and held item from §17-18); the local player's live state refused; `send_message` writes the log and `send_action_bar` the overlay |
-| 22 | Status effects and damage | 29 | todo |
+| 22 | Status effects and damage | 29 | done | Effect types a mod registers and applies to its own player state; damage as a real calculation (armour, resistance, protection, cooldown, modifiers) with types and sources as registries |
 | 23 | Physics and collision | 35 | todo |
 | 24 | Raycasting and interaction | 32 | todo |
 | 25 | Movement and locomotion | 36 | todo |
@@ -412,6 +412,30 @@ UI, audio and renderer, and `give_item`, `take_item`, `apply_effect`, `teleport`
 Verified in a live client: a player state rendered with all its fields, a 64-torch held item
 and a shield offhand, `de_de` with the team and level, `[chat] hello from the example` in the
 log, every live question `None`, and every authority call `false`.
+
+### 22 — Status effects and damage
+
+The effects half is a registry plus the list section 21 already keeps: a mod registers an
+effect type — id, name, good or bad, colour, icon and particle names, default duration and
+amplifier, whether it has a behaviour — and `apply`, `remove`, `clear`, `has`, `get`,
+`get_duration`, `set_duration`, `get_amplifier` and `set_amplifier` work on the
+[`PlayerState`] a mod owns, so an effect a mod applies to its own state is really there.
+`register_behavior`, `register_icon` and `register_particles` record what a mod ships; the
+client's icons and particles are its own, and the behaviour is never called here.
+
+The damage half is real arithmetic, which is why it is worth having before any hook exists:
+[`DamageInstance`] carries the amount, the type, the source, armour and toughness,
+resistance, enchantment protection, the cooldown and the knockback, and resolves in the order
+the game does — armour, then resistance, then protection, then the cooldown multiplier, then
+the mod's own final modifiers. Damage *types* (including ones that go through armour),
+*sources* and *modifiers* are registries a mod owns. Verified in a live client: 10 untouched,
+2.52 through 20 armour with toughness 2, resistance 2 and protection 4 (reductions 0.500,
+0.400, 0.160), 3.60 for a quick second hit, and 10.00 again for a type that bypasses armour
+and resistance.
+
+What is out of reach keeps its own reason: applying an effect or damage to a live entity is
+the server's, and `modify_calculation` would need a hook on the client's damage path. The
+thirty-three event kinds this section lists are registered on the §6 bus.
 
 ## Open: a wild jump on the first frame
 

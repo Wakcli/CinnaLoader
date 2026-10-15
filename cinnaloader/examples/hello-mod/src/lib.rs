@@ -1579,6 +1579,129 @@ impl Mod for Hello {
             );
         });
 
+        // Section 22: effects a mod registers, and damage arithmetic it owns.
+        tasks::schedule_after_ticks(28, move || {
+            effects::register_event_kinds();
+            let mut who = PlayerState::new("Tester");
+            info!(
+                "effects: register={} type={:?}",
+                effects::register(
+                    EffectType::new("hello:haste", "Haste")
+                        .beneficial()
+                        .color(0x11_ff88)
+                        .icon("hello:haste")
+                        .particles("minecraft:spark")
+                        .duration(3_000)
+                        .amplifier(1)
+                        .with_behavior()
+                ),
+                effects::get_by_id("hello:haste").map(|effect| effect.to_string()),
+            );
+            info!(
+                "effects: apply={} has={} duration={:?} amplifier={:?} level={:?}",
+                effects::apply(&mut who, "hello:haste", 0, 0),
+                effects::has(&who, "hello:haste"),
+                effects::get_duration(&who, "hello:haste"),
+                effects::get_amplifier(&who, "hello:haste"),
+                effects::get(&who, "hello:haste").map(|effect| effect.level()),
+            );
+            info!(
+                "effects: set_duration={} set_amplifier={} now={:?}/{:?} icon={} particles={} behavior={} unregistered_apply={}",
+                effects::set_duration(&mut who, "hello:haste", 9_000),
+                effects::set_amplifier(&mut who, "hello:haste", 3),
+                effects::get_duration(&who, "hello:haste"),
+                effects::get_amplifier(&who, "hello:haste"),
+                effects::register_icon("hello:haste", "hello:haste_icon"),
+                effects::register_particles("hello:haste", "minecraft:spark"),
+                effects::register_behavior("hello:haste"),
+                effects::apply(&mut who, "an-unregistered-one", 100, 0),
+            );
+            info!(
+                "effects: by_name={:?} all={} remove={} clear={} live_apply={} active={}",
+                effects::get_by_name("Haste").map(|effect| effect.id),
+                effects::get_all().len(),
+                effects::remove(&mut who, "an-unregistered-one"),
+                effects::clear(&mut who),
+                effects::apply_live("hello:haste", 100, 0),
+                who.effects.len(),
+            );
+            info!(
+                "damage: register_type={} bypasses={:?} fire={:?}",
+                damage::register_type(
+                    damage::DamageType::new("hello:void")
+                        .bypasses_armor()
+                        .bypasses_resistance()
+                        .fire()
+                        .no_knockback()
+                ),
+                damage::get_type("hello:void").map(|kind| kind.bypasses_armor),
+                damage::get_type("hello:void").map(|kind| kind.is_fire),
+            );
+            let plain = damage::DamageInstance::new(10.0, "minecraft:generic");
+            let armored = damage::DamageInstance::new(10.0, "minecraft:generic")
+                .with_armor(20.0)
+                .with_toughness(2.0)
+                .with_resistance(2)
+                .with_protection(4);
+            info!(
+                "damage: plain={:.2} armored={:.2} reductions: armor={:.3} resistance={:.3} protection={:.3} cooldown={:.3}",
+                damage::calculate(&plain),
+                damage::calculate(&armored),
+                damage::get_armor_reduction(&armored),
+                damage::get_resistance(&armored),
+                damage::get_enchantment_reduction(&armored),
+                damage::get_cooldown(&armored),
+            );
+            let quick = damage::DamageInstance::new(10.0, "minecraft:generic").with_cooldown(100);
+            let mut cancelled = plain.clone();
+            damage::cancel(&mut cancelled);
+            let mut knock = plain.clone();
+            damage::set_knockback(&mut knock, 1.5);
+            let through = damage::DamageInstance::new(10.0, "hello:void")
+                .with_armor(20.0)
+                .with_resistance(4);
+            info!(
+                "damage: cooldown_multiplier={:.3} quick={:.2} cancelled={:.2} knockback={:.1} void_through_armor={:.2} amount={:.2} knockback_default={:.1}",
+                damage::get_cooldown(&quick),
+                damage::calculate(&quick),
+                damage::resolve(&cancelled),
+                damage::get_knockback(&knock),
+                damage::calculate(&through),
+                damage::get_amount(&armored),
+                damage::get_knockback(&plain),
+            );
+            info!(
+                "damage: register_modifier={} modifier={:?} source={} by={:?} applied_to_player={:.1}",
+                damage::register_modifier(damage::DamageModifier {
+                    name: "hello:sharp".to_owned(),
+                    kind: damage::DamageModifierKind::Multiply,
+                    amount: 0.5,
+                }),
+                damage::get_modifier("hello:sharp").map(|modifier| modifier.amount),
+                damage::register_source(
+                    damage::DamageSource::new("hello:arrow")
+                        .by("Tester")
+                        .with_weapon("minecraft:bow")
+                ),
+                damage::get_source_by_id("hello:arrow").and_then(|source| source.attacker),
+                damage::apply_to(&mut who, &plain),
+            );
+            info!(
+                "damage: live_apply={} modify_calculation={} types={} events={} known={} refusals={:?}",
+                damage::apply(&plain),
+                damage::modify_calculation("hello:damage"),
+                damage::get_types().len(),
+                effects::event_kinds().len(),
+                effects::has_event_kind("entity_damage"),
+                effects::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "effects: unregister={} damage_unregister={}",
+                effects::unregister("hello:haste"),
+                damage::unregister_type("hello:void"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

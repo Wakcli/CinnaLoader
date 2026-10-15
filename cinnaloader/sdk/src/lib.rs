@@ -51,6 +51,7 @@ pub mod components;
 pub mod config;
 pub mod deps;
 pub mod diagnostics;
+pub mod effects;
 pub mod entities;
 pub mod events;
 pub mod fs;
@@ -1260,6 +1261,10 @@ pub mod prelude {
         CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
         LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
         ResolutionErrorKind, SoftDependency, VersionedDependency,
+    };
+    pub use crate::effects::{
+        self as effects, damage, DamageInstance, DamageModifier, DamageModifierKind,
+        DamageSource, DamageType, EffectCategory, EffectType,
     };
     pub use crate::entities::{
         self as entities, EntityComponent, EntitySize, EntityType,
