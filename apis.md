@@ -49,7 +49,7 @@ guide, not a contract.
 | 11 | Filesystem and storage | 47 | done | `fs::*` rooted in the mod's own directory (escapes refused) and a key/value `storage::*` beside its config |
 | 12 | Resource and asset management | 24 | done | Packs by namespace with priorities, overrides, reload listeners and a per-mod `assets/` pack |
 | 13 | Localization | 21 | done | Keys per language with a fallback, `one\|many` plurals, placeholders, and the handful of formats a player sees |
-| 14 | Game and session state | 33 | todo |
+| 14 | Game and session state | 33 | done | What the host observes itself: frames, ticks, rates, version, launch address, window, phase, its own two managers, and four recorded requests |
 | 15 | World and dimension APIs | 56 | todo |
 | 16 | Block APIs | 50 | todo |
 | 17 | Item APIs | 47 | todo |
@@ -203,15 +203,47 @@ missing dependencies, errors logged, panics caught, a task queue that is not dra
 Heavy diagnostics reads in the example are deferred to the first tick rather than done in
 `load`, see the note below on the crash that produced that decision.
 
+### 14 — Game and session state
+
+Two kinds of answer, kept apart on purpose. What this host observes itself: that it is
+running, for how long, frames and ticks and their rates (counted from the client's own frame,
+one tick per frame), the longest frame, the game version the client's assets name, the
+address the client was launched with, the window when the launcher named it, the phase, the
+loader's own resource stack and mod registry, and the host clock.
+
+What it cannot reach: the client's screen, world, player, dimension, game mode, pause state,
+menu state, network manager and world renderer are objects inside the client that this host
+has no handle on. Each answers `None` with a reason from `why_unknown`, rather than a
+plausible-looking value, and `get_client`, `get_server`, `get_network_manager` and
+`get_world_renderer` do the same.
+
+The four requests are honest rather than convenient: `request_resource_reload` is real
+because the loader owns a resource stack; `request_disconnect`, `request_world_reload` and
+`request_game_shutdown` are recorded with the reason they cannot be made, and logged so the
+user sees them. A loader that killed a client mid-frame would corrupt its state.
+
+`is_multiplayer`/`is_singleplayer` come from the launch command line and `is_online` is the
+loader's own observation (an address was named and frames are still arriving), which is what
+it says it is.
+
+Verified in a live client: `version="1.26.50.4"`, `multiplayer=true`,
+`server=Some("127.0.0.1:19132")`, `online=true`, `window=Some(Window { 1280x720 })`, the
+session and runtime values, the registry and resource summaries, every unseen question
+`None`, and the request log with only the resource reload granted.
+
 ## Open: a wild jump on the first frame
 
-Five client runs crashed with a wild jump (rip ~850 MB past the executable's image, in no
-mapping) about two seconds after the loader hooked the panel, with the same mod that then
-ran cleanly in the CLI, which has no hooks. The trigger tracks what the mod does during
-`load`: the same mod with only its logging half, or only its diagnostics half, survived;
-both halves together crashed, and moving the diagnostics reads to the first tick fixed it
-without losing any coverage. The panel hook is the only hook in that path and is the
-suspect. Repeated for the record in `cinnaloader-notes/STATUS.md`.
+A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside
+one hook callback — during `load`, which runs from the preload's constructor, or in a single
+tick, which runs from the frame hook. The same mod built the same way runs to completion in
+the CLI, which installs no hooks. Six runs died this way while sections 9–14 were verified;
+moving each section's demonstration into its own task, one section per tick, made every run
+stable again, and no coverage was lost — the same lines appear, a few ticks later.
+
+So the constraint is the hook layer's, not the API's: keep any single callback light. The
+suspicion is ilhook's `hook_closure_jmp_back` path, which is the one thing between the
+client's frame and a mod's tick. Reproduced and recorded in `cinnaloader-notes/STATUS.md`;
+root-causing it is its own piece of work and does not block the roadmap.
 
 Separately: a client killed with `SIGTERM` faults inside the NVIDIA driver on the way out
 whether or not the loader is attached, so `tools/mcp.py` now asks it to quit first and each

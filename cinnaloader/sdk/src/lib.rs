@@ -51,6 +51,7 @@ pub mod deps;
 pub mod diagnostics;
 pub mod events;
 pub mod fs;
+pub mod game;
 pub mod i18n;
 pub mod lifecycle;
 pub mod log;
@@ -1039,6 +1040,8 @@ pub fn frame_body<T: Mod>(module: &mut T, dt_millis: u32, first: bool) -> i32 {
         module.tick(dt_millis);
         lifecycle::enter(lifecycle::Phase::TickEnd);
         module.tick_end(dt_millis);
+        // One frame is one tick for this host, which is what `game` counts.
+        game::note_frame(dt_millis);
         // Whatever was scheduled for this tick runs now, before the frame ends.
         tasks::run_due(dt_millis);
         true
@@ -1247,6 +1250,7 @@ pub mod prelude {
         self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,
     };
     pub use crate::fs::{self as fs, File, FsError, Metadata as FileMetadata, Watch};
+    pub use crate::game::{self as game, Request, RequestOutcome, SessionInfo, Window};
     pub use crate::i18n::{self as i18n, Language, NumberStyle};
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};

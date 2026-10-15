@@ -299,476 +299,571 @@ impl Mod for Hello {
         info!("tasks: pool size={}", pool.size());
         self.pool_result = Some(pooled);
 
-        // Section 9: a typed config with a schema, watched and validated.
-        fn rename_corner(config: &mut std::collections::BTreeMap<String, ConfigValue>) {
-            if let Some(value) = config.remove("corner_name") {
-                config.insert("corner_label".to_owned(), value);
-            }
-        }
-        config::register_schema(
-            ConfigSchema::new("hello")
-                .version(env!("CARGO_PKG_VERSION"))
-                .migration(ConfigMigration::new(
-                    "0.0.1",
-                    "0.1.0",
-                    "corner_name became corner_label",
-                    rename_corner,
-                ))
-                .entry(
-                    ConfigEntry::new("greeting", ConfigValue::Text("hello".to_owned()))
-                        .comment("what the mod says when it starts")
-                        .group(ConfigGroup::new("Text", "Display"))
-                        .constraint(config::required())
-                        .constraint(config::max_length(32)),
-                )
-                .entry(
-                    ConfigEntry::new("loudness", ConfigValue::Percentage(50.0))
-                        .comment("how loudly it says it")
-                        .constraint(config::range(0.0, 100.0)),
-                )
-                .entry(
-                    ConfigEntry::new("target", ConfigValue::String("minecraft:stone".to_owned()))
-                        .constraint(config::pattern("minecraft:*"))
-                        .constraint(config::one_of(&["minecraft:stone", "minecraft:dirt"])),
-                )
-                .entry(
-                    ConfigEntry::new("dev_only", ConfigValue::Boolean(false))
-                        .visibility(ConfigVisibility::Development)
-                        .restart(ConfigRestartRequirement::Restart),
-                )
-                .entry(
-                    ConfigEntry::new("enabled_when_demo", ConfigValue::Boolean(true))
-                        .constraint(config::visible_when("loudness", &["100"])),
-                ),
-        );
-        config::register_validator(ConfigValidator::new("loudness must be a step", |config| {
-            match config.get("loudness").and_then(ConfigValue::as_float) {
-                Some(loudness) if (loudness % 5.0).abs() > f64::EPSILON => {
-                    vec![format!("loudness {loudness} is not a multiple of 5")]
-                }
-                _ => Vec::new(),
-            }
-        }));
-        let loaded = config::load();
-        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let into = std::sync::Arc::clone(&seen);
-        config::watch("greeting", move |key, value| {
-            into.lock().unwrap().push(format!("{key}={}", value.render()));
-        });
-        config::on_changed(|all| info!("config: {} keys now", all.len()));
-        info!(
-            "config: loaded={loaded} keys={:?} dirty={} errors={:?}",
-            config::keys(),
-            config::is_dirty(),
-            config::get_errors(),
-        );
-        info!(
-            "config: get(greeting)={:?} get_or(missing)={:?} contains(loudness)={}",
-            config::get("greeting"),
-            config::get_or("missing", ConfigValue::Integer(7)),
-            config::contains("loudness"),
-        );
-        info!(
-            "config: set(greeting)={} set(loudness=61)={} set(bad target)={} errors={:?}",
-            config::set("greeting", ConfigValue::Text("hi there".to_owned())),
-            config::set("loudness", ConfigValue::Percentage(61.0)),
-            config::set("target", ConfigValue::String("other:stone".to_owned())),
-            config::get_errors(),
-        );
-        info!("config: watcher saw {:?}", seen.lock().unwrap());
-        let mut txn = config::transaction();
-        config::set("greeting", ConfigValue::Text("in a transaction".to_owned()));
-        info!("config: inside a transaction get={:?}", config::get("greeting"));
-        info!("config: rollback={}", txn.rollback());
-        info!("config: after rollback get={:?}", config::get("greeting"));
-        info!(
-            "config: defaults={:?} schema={:?} values={}",
-            config::get_defaults().keys().collect::<Vec<_>>(),
-            config::get_schema().map(|schema| schema.entries.len()),
-            config::values().len(),
-        );
-        info!(
-            "config: reset_key(loudness)={} now={:?}",
-            config::reset_key("loudness"),
-            config::get("loudness"),
-        );
-        info!("config: save={} dirty={}", config::save(), config::is_dirty());
-        match config::backup() {
-            Ok(path) => info!("config: backup at {}", path.display()),
-            Err(error) => warn!("config: no backup: {error}"),
-        }
-        match config::export(None) {
-            Ok(path) => info!("config: exported to {}", path.display()),
-            Err(error) => warn!("config: no export: {error}"),
-        }
-        info!("config: reload={} keys={:?}", config::reload(), config::keys());
-        match config::restore() {
-            Ok(count) => info!("config: restored {count} entries"),
-            Err(error) => warn!("config: no restore: {error}"),
-        }
-        let migration_probe = config::migrate("0.0.1", env!("CARGO_PKG_VERSION"));
-        info!(
-            "config: migrate ran {migration_probe} step(s), remove(missing)={}, reset={}",
-            config::remove("nothing_here"),
-            config::reset(),
-        );
-        info!(
-            "config: all={:?} errors={:?} validators={}",
-            config::all().keys().collect::<Vec<_>>(),
-            config::validate(),
-            config::get_errors().len(),
-        );
-
-        // Section 10: what this mod may do, and what it may not.
-        info!(
-            "permissions: trust={} trusted={} declared={:?}",
-            permissions::get_trust_level(),
-            permissions::is_trusted(),
-            permissions::list_declared(),
-        );
-        info!(
-            "permissions: has(WriteFiles)={} has(ReadFiles)={} has(AccessMemory)={} has(LaunchProcesses)={}",
-            permissions::has(Permission::WriteFiles),
-            permissions::has(Permission::ReadFiles),
-            permissions::has(Permission::AccessMemory),
-            permissions::has(Permission::LaunchProcesses),
-        );
-        info!(
-            "permissions: request(RegisterCommands)={} request(AccessMemory)={} reason={:?}",
-            permissions::request(Permission::RegisterCommands),
-            permissions::request(Permission::AccessMemory),
-            permissions::denied()
-                .iter()
-                .find(|(permission, _)| *permission == Permission::AccessMemory)
-                .map(|(_, reason)| reason.clone()),
-        );
-        info!(
-            "permissions: grant(AccessMemory)={} grant(CameraControl)={} revoked(CameraControl)={} restrict(CameraControl)={} grant again={}",
-            permissions::grant(Permission::AccessMemory),
-            permissions::grant(Permission::OpenUrls),
-            permissions::revoke(Permission::OpenUrls),
-            permissions::restrict(Permission::OpenUrls),
-            permissions::grant(Permission::OpenUrls),
-        );
-        info!(
-            "permissions: prompt_user(ReadGameState)={} set_trust(Trusted)={} set_trust(Untrusted)={} now={}",
-            permissions::prompt_user(Permission::ReadGameState),
-            permissions::set_trust_level(TrustLevel::Trusted),
-            permissions::set_trust_level(TrustLevel::Untrusted),
-            permissions::get_trust_level(),
-        );
-        permissions::record_access(Permission::ReadFiles, "read the config at load");
-        info!(
-            "permissions: list={} policy={:?} for core_lib={:?} audit={} lines",
-            permissions::list().len(),
-            permissions::get_policy()
-                .iter()
-                .filter(|(permission, _)| *permission == Permission::AccessMemory
-                    || *permission == Permission::ReadFiles)
-                .map(|(permission, grant)| (permission.as_str(), grant.to_string()))
-                .collect::<Vec<_>>(),
-            permissions::list_for_mod("core_lib"),
-            permissions::get_audit_log().len(),
-        );
-        for line in permissions::report() {
-            info!("permissions: {line}");
-        }
-        info!(
-            "permissions: registered={} unregister={}",
-            permissions::register(Permission::OpenUrls),
-            permissions::unregister(Permission::OpenUrls),
-        );
-
-        // Section 11: the mod's own files, and a key/value store beside its config.
-        info!(
-            "fs: root={:?} create={:?} write={:?}",
-            fs::root(),
-            fs::create_directories("cache"),
-            fs::write_text("cache/last-run.txt", "hello from the example"),
-        );
-        info!(
-            "fs: exists={} is_file={} is_directory={} text={:?} bytes={:?}",
-            fs::exists("cache/last-run.txt"),
-            fs::is_file("cache/last-run.txt"),
-            fs::is_directory("cache"),
-            fs::read_text("cache/last-run.txt"),
-            fs::read_bytes("cache/last-run.txt").map(|bytes| bytes.len()),
-        );
-        info!("fs: append={:?}", fs::append("cache/last-run.txt", b" again"));
-        info!(
-            "fs: escape refusals: {:?} {:?}",
-            fs::read_text("../outside.txt").err(),
-            fs::write_text("/etc/cinnaloader-probe", "no"),
-        );
-        info!(
-            "fs: copy={:?} rename={:?} size={} modified={:?}",
-            fs::copy("cache/last-run.txt", "cache/second.txt", true),
-            fs::rename("cache/second.txt", "cache/third.txt"),
-            fs::file_size("cache/third.txt"),
-            fs::modified_time("cache/third.txt").is_some(),
-        );
-        info!(
-            "fs: list={:?} walk={} metadata={:?}",
-            fs::list("cache").map(|entries| entries.len()),
-            fs::walk("cache").map(|entries| entries.len()).unwrap_or_default(),
-            fs::metadata("cache/last-run.txt").map(|meta| (meta.size, meta.is_file, meta.age().is_some())),
-        );
-        info!(
-            "fs: canonical={:?} hash={:?} identical={} delete={:?}",
-            fs::canonicalize("cache/third.txt"),
-            fs::hash("cache/third.txt"),
-            fs::identical("cache/last-run.txt", "cache/third.txt"),
-            fs::delete("cache/third.txt"),
-        );
-        info!(
-            "fs: atomic_write={:?} read back={:?}",
-            fs::atomic_write("cache/atomic.txt", b"written atomically"),
-            fs::read_text("cache/atomic.txt"),
-        );
-        let mut handle = fs::open_write("cache/streamed.txt").unwrap_or_else(|_| {
-            fs::open_read("cache/atomic.txt").expect("the file that was just written")
-        });
-        let _ = handle.write(b"streamed through a handle");
-        let _ = handle.flush();
-        info!(
-            "fs: handle path={} read back={:?}",
-            handle.path().display(),
-            fs::read_text("cache/streamed.txt"),
-        );
-        info!(
-            "fs: temp file={:?} temp dir={:?} watch={:?} watch_count={} unwatch={}",
-            fs::temporary_file(Some("cache")).map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
-            fs::temporary_directory(Some("cache")).map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
-            fs::watch("cache/atomic.txt", |path, _| info!("fs: watched {} change", path.display())).map(|_| ()),
-            fs::watch_count(),
-            fs::unwatch(1),
-        );
-        let packed = fs::compress(b"aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbcc");
-        info!(
-            "fs: compressed {} bytes to {} and back to {:?}",
-            34,
-            packed.len(),
-            fs::decompress(&packed).map(|bytes| bytes.len()),
-        );
-        info!(
-            "storage: open={:?} set={} flush={:?} keys={:?}",
-            storage::open("seen"),
-            storage::set("blocks", ConfigValue::Integer(42)),
-            storage::flush(),
-            storage::keys(""),
-        );
-        let world = storage::namespace("world");
-        world.set("spawn", ConfigValue::Text("0,64,0".to_owned()));
-        info!(
-            "storage: version={:?} get(blocks)={:?} namespaced={:?} all={}",
-            storage::version(),
-            storage::get("blocks"),
-            world.get("spawn"),
-            storage::keys("").len(),
-        );
-        let mut batch = storage::transaction().unwrap();
-        storage::set("blocks", ConfigValue::Integer(7));
-        info!("storage: inside a batch blocks={:?} rollback={}", storage::get("blocks"), batch.rollback());
-        info!("storage: after rollback blocks={:?}", storage::get("blocks"));
-        storage::set("blocks", ConfigValue::Integer(43));
-        info!(
-            "storage: migrate={:?} version={:?} delete={} contains={} clear={}",
-            storage::migrate("2", |values| {
-                if let Some(value) = values.remove("old") {
-                    values.insert("renewed".to_owned(), value);
-                }
-            }),
-            storage::version(),
-            storage::delete("nothing"),
-            storage::contains("blocks"),
-            storage::clear(),
-        );
-        storage::set("blocks", ConfigValue::Integer(44));
-        info!(
-            "storage: flush={:?} backup={:?} restore={:?} stores={:?} close={} open_database={:?}",
-            storage::flush(),
-            storage::backup().map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
-            storage::restore(),
-            storage::stores(),
-            storage::close(),
-            storage::open_database("log"),
-        );
-        info!(
-            "storage: packed open={:?} set={} flush={:?} close={}",
-            storage::open("tidy.packed"),
-            storage::set("note", ConfigValue::Text("packed".to_owned())),
-            storage::flush(),
-            storage::close(),
-        );
-        info!(
-            "storage: format round trip get={:?} stores={:?}",
-            storage::open("tidy.packed").map(|_| storage::get("note")),
-            storage::stores(),
-        );
-        storage::close();
-
-        // Section 12: resources by id, over a stack of packs.
-        let mut own = ResourcePack::memory("hello-demo", 5).namespace("hello");
-        own.insert("textures/gui/menu.png", b"png bytes".to_vec());
-        own.insert("lang/en_us.txt", b"greeting=hi there".to_vec());
-        resources::register_pack(own);
-        let mut weaker = ResourcePack::memory("hello-weaker", 1).namespace("hello");
-        weaker.insert("lang/en_us.txt", b"greeting=low priority".to_vec());
-        resources::register_pack(weaker);
-        let mut overlay = ResourcePack::memory("hello-overlay", 20).namespace("hello");
-        overlay.insert("data/thing.json", b"{\"overlay\":true}".to_vec());
-        resources::register_pack(overlay);
-        info!(
-            "resources: registered={} packs={:?} stack={:?}",
-            resources::register(
-                &"hello:textures/extra.png".parse().unwrap_or_else(|_| unreachable!()),
-                b"registered at runtime".to_vec()
-            ),
-            resources::get_active_packs(),
-            resources::get_resource_stack(),
-        );
-        let menu = "hello:textures/gui/menu.png".parse::<ResourceId>().ok();
-        let lang = "hello:lang/en_us.txt".parse::<ResourceId>().ok();
-        info!(
-            "resources: exists={:?} text={:?} bytes={:?} metadata={:?}",
-            menu.as_ref().map(resources::exists),
-            lang.as_ref().and_then(resources::read_text),
-            lang.as_ref().and_then(resources::read_bytes).map(|bytes| bytes.len()),
-            menu.as_ref().and_then(resources::metadata),
-        );
-        info!(
-            "resources: list={} find={} overrides={:?}",
-            resources::list("hello").len(),
-            resources::find("hello:lang/*").len(),
-            resources::get_overrides()
-                .into_iter()
-                .map(|over| over.id.to_string())
-                .collect::<Vec<_>>(),
-        );
-        info!(
-            "resources: namespaces={:?} priorities={:?} set_priority={} now={:?}",
-            resources::get_namespace(&lang.clone().unwrap()),
-            [
-                resources::get_priority("hello-overlay"),
-                resources::get_priority("hello-demo"),
-            ],
-            resources::set_priority("hello-weaker", 30),
-            resources::get_priority("hello-weaker"),
-        );
-        let fired = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
-        let counter = std::sync::Arc::clone(&fired);
-        resources::add_reload_listener("hello:cache", &["hello"], move || {
-            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        });
-        resources::watch(&lang.clone().unwrap(), |id| info!("resources: watched {id} reload"));
-        info!(
-            "resources: reload={} namespace reload={} listeners={:?} fired={} count={}",
-            resources::reload(),
-            resources::reload_namespace("hello"),
-            resources::get_reload_listeners(),
-            fired.load(std::sync::atomic::Ordering::Relaxed),
-            resources::reload_count(),
-        );
-        resources::depend(ResourceDependency {
-            id: "hello:textures/absent.png".parse().unwrap(),
-            required_by: "hello-mod".to_owned(),
-            optional: false,
-        });
-        info!(
-            "resources: validate={:?} missing={:?} errors={:?}",
-            resources::validate(),
-            resources::get_missing_resources()
-                .into_iter()
-                .map(|id| id.to_string())
-                .collect::<Vec<_>>(),
-            resources::get_loading_errors().len(),
-        );
-        info!(
-            "resources: own_pack={:?} assets={:?} unregister={:?} unregister_pack={:?}",
-            resources::own_pack().map(|pack| pack.name),
-            resources::assets_directory().is_some(),
-            menu.as_ref().map(resources::unregister),
-            resources::unregister_pack("hello-overlay"),
-        );
-
-        // Section 13: keys in the languages this mod ships.
-        fs::write_text(
-            "assets/lang/en_us.txt",
-            "hello=Hello, {0}!\napples=one apple|{0} apples\nbye=Bye\n",
-        )
-        .ok();
-        fs::write_text(
-            "assets/lang/de_de.txt",
-            "hello=Hallo, {0}!\napples=ein Apfel|{0} Äpfel\n",
-        )
-        .ok();
-        resources::register_pack(
-            ResourcePack::directory("hello-mod-assets", "assets", 50).namespace("hello"),
-        );
-        i18n::register_language("en_us", "English");
-        i18n::register_language("de_de", "Deutsch");
-        info!(
-            "i18n: languages={:?} current={} fallback={} read={}",
-            i18n::get_languages()
-                .into_iter()
-                .map(|language| language.code)
-                .collect::<Vec<_>>(),
-            i18n::get_current_language(),
-            i18n::get_fallback_language(),
-            i18n::reload(),
-        );
-        let heard = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
-        let counter = std::sync::Arc::clone(&heard);
-        i18n::on_language_changed(move |_| {
-            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        });
-        info!(
-            "i18n: set(de_de)={} current={} translate={:?} with_args={:?} plural1={:?} plural4={:?}",
-            i18n::set_current_language("de_de"),
-            i18n::get_current_language(),
-            i18n::translate("hello"),
-            i18n::translate_with("hello", &["Welt"]),
-            i18n::translate_plural("apples", 1),
-            i18n::translate_plural("apples", 4),
-        );
-        info!(
-            "i18n: has(hello)={} has(bye)={} get(bye)={:?} in_de={:?} watchers={}",
-            i18n::has_translation("hello"),
-            i18n::has_translation("bye"),
-            i18n::get_translation("bye"),
-            i18n::get_translation_in("de_de", "hello"),
-            i18n::watcher_count(),
-        );
-        i18n::set_fallback_language("en_us");
-        info!(
-            "i18n: formats number={:?} number_de={:?} date={:?} time={:?} duration={:?} currency={:?}",
-            i18n::format_number(1234567.5),
-            i18n::format_number_in("de_de", 1234567.5),
-            i18n::format_date(1_700_000_000),
-            i18n::format_time(86_400 + 3661),
-            i18n::format_duration(3_723_000),
-            i18n::format_currency(12.5, "usd"),
-        );
-        i18n::register_translations("fr_fr", &[("hello", "Bonjour, {0} !")]);
-        info!(
-            "i18n: unregister_translations(fr_fr)={} unregister_language(fr_fr)={} languages={} resource_id={:?}",
-            i18n::unregister_translations("fr_fr"),
-            i18n::unregister_language("fr_fr"),
-            i18n::get_languages().len(),
-            i18n::resource_id_for("en_us").map(|id| id.to_string()),
-        );
-
         self.beat = Timer::every(1000);
-        // A hook that cannot run yet, and one that runs as this mod is dropped.
-        defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));
-        register_cleanup(|| info!("lifecycle: cleanup ran while unloading"));
-        // Whatever the user last chose, kept next to the mods.
-        if let Some(name) = config_value("name") {
-            info!("hello-mod remembered {name}");
-        } else {
-            set_config("name", "hello-mod");
-        }
-        info!("hello-mod initialised (mods from {})", mods_dir().unwrap_or("?"));
+
+        // Everything below reads state and logs it, so it runs after the loader has finished
+        // starting up rather than during `load`: a heavy load phase, or a heavy single
+        // callback, has tripped the hook layer before.
+
+        // // Section 9: a typed config with a schema, watched and validated. — one group per tick: every section doing its work inside one
+        // hook callback at once is what trips the hook layer (see AGENTS.md).
+        tasks::schedule_after_ticks(2, move || {
+            // Section 9: a typed config with a schema, watched and validated.
+            fn rename_corner(config: &mut std::collections::BTreeMap<String, ConfigValue>) {
+                if let Some(value) = config.remove("corner_name") {
+                    config.insert("corner_label".to_owned(), value);
+                }
+            }
+            config::register_schema(
+                ConfigSchema::new("hello")
+                    .version(env!("CARGO_PKG_VERSION"))
+                    .migration(ConfigMigration::new(
+                        "0.0.1",
+                        "0.1.0",
+                        "corner_name became corner_label",
+                        rename_corner,
+                    ))
+                    .entry(
+                        ConfigEntry::new("greeting", ConfigValue::Text("hello".to_owned()))
+                            .comment("what the mod says when it starts")
+                            .group(ConfigGroup::new("Text", "Display"))
+                            .constraint(config::required())
+                            .constraint(config::max_length(32)),
+                    )
+                    .entry(
+                        ConfigEntry::new("loudness", ConfigValue::Percentage(50.0))
+                            .comment("how loudly it says it")
+                            .constraint(config::range(0.0, 100.0)),
+                    )
+                    .entry(
+                        ConfigEntry::new("target", ConfigValue::String("minecraft:stone".to_owned()))
+                            .constraint(config::pattern("minecraft:*"))
+                            .constraint(config::one_of(&["minecraft:stone", "minecraft:dirt"])),
+                    )
+                    .entry(
+                        ConfigEntry::new("dev_only", ConfigValue::Boolean(false))
+                            .visibility(ConfigVisibility::Development)
+                            .restart(ConfigRestartRequirement::Restart),
+                    )
+                    .entry(
+                        ConfigEntry::new("enabled_when_demo", ConfigValue::Boolean(true))
+                            .constraint(config::visible_when("loudness", &["100"])),
+                    ),
+            );
+            config::register_validator(ConfigValidator::new("loudness must be a step", |config| {
+                match config.get("loudness").and_then(ConfigValue::as_float) {
+                    Some(loudness) if (loudness % 5.0).abs() > f64::EPSILON => {
+                        vec![format!("loudness {loudness} is not a multiple of 5")]
+                    }
+                    _ => Vec::new(),
+                }
+            }));
+            let loaded = config::load();
+            let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            let into = std::sync::Arc::clone(&seen);
+            config::watch("greeting", move |key, value| {
+                into.lock().unwrap().push(format!("{key}={}", value.render()));
+            });
+            config::on_changed(|all| info!("config: {} keys now", all.len()));
+            info!(
+                "config: loaded={loaded} keys={:?} dirty={} errors={:?}",
+                config::keys(),
+                config::is_dirty(),
+                config::get_errors(),
+            );
+            info!(
+                "config: get(greeting)={:?} get_or(missing)={:?} contains(loudness)={}",
+                config::get("greeting"),
+                config::get_or("missing", ConfigValue::Integer(7)),
+                config::contains("loudness"),
+            );
+            info!(
+                "config: set(greeting)={} set(loudness=61)={} set(bad target)={} errors={:?}",
+                config::set("greeting", ConfigValue::Text("hi there".to_owned())),
+                config::set("loudness", ConfigValue::Percentage(61.0)),
+                config::set("target", ConfigValue::String("other:stone".to_owned())),
+                config::get_errors(),
+            );
+            info!("config: watcher saw {:?}", seen.lock().unwrap());
+            let mut txn = config::transaction();
+            config::set("greeting", ConfigValue::Text("in a transaction".to_owned()));
+            info!("config: inside a transaction get={:?}", config::get("greeting"));
+            info!("config: rollback={}", txn.rollback());
+            info!("config: after rollback get={:?}", config::get("greeting"));
+            info!(
+                "config: defaults={:?} schema={:?} values={}",
+                config::get_defaults().keys().collect::<Vec<_>>(),
+                config::get_schema().map(|schema| schema.entries.len()),
+                config::values().len(),
+            );
+            info!(
+                "config: reset_key(loudness)={} now={:?}",
+                config::reset_key("loudness"),
+                config::get("loudness"),
+            );
+            info!("config: save={} dirty={}", config::save(), config::is_dirty());
+            match config::backup() {
+                Ok(path) => info!("config: backup at {}", path.display()),
+                Err(error) => warn!("config: no backup: {error}"),
+            }
+            match config::export(None) {
+                Ok(path) => info!("config: exported to {}", path.display()),
+                Err(error) => warn!("config: no export: {error}"),
+            }
+            info!("config: reload={} keys={:?}", config::reload(), config::keys());
+            match config::restore() {
+                Ok(count) => info!("config: restored {count} entries"),
+                Err(error) => warn!("config: no restore: {error}"),
+            }
+            let migration_probe = config::migrate("0.0.1", env!("CARGO_PKG_VERSION"));
+            info!(
+                "config: migrate ran {migration_probe} step(s), remove(missing)={}, reset={}",
+                config::remove("nothing_here"),
+                config::reset(),
+            );
+            info!(
+                "config: all={:?} errors={:?} validators={}",
+                config::all().keys().collect::<Vec<_>>(),
+                config::validate(),
+                config::get_errors().len(),
+            );
+        });
+
+        // // Section 10: what this mod may do, and what it may not. — one group per tick: every section doing its work inside one
+        // hook callback at once is what trips the hook layer (see AGENTS.md).
+        tasks::schedule_after_ticks(4, move || {
+            // Section 10: what this mod may do, and what it may not.
+            info!(
+                "permissions: trust={} trusted={} declared={:?}",
+                permissions::get_trust_level(),
+                permissions::is_trusted(),
+                permissions::list_declared(),
+            );
+            info!(
+                "permissions: has(WriteFiles)={} has(ReadFiles)={} has(AccessMemory)={} has(LaunchProcesses)={}",
+                permissions::has(Permission::WriteFiles),
+                permissions::has(Permission::ReadFiles),
+                permissions::has(Permission::AccessMemory),
+                permissions::has(Permission::LaunchProcesses),
+            );
+            info!(
+                "permissions: request(RegisterCommands)={} request(AccessMemory)={} reason={:?}",
+                permissions::request(Permission::RegisterCommands),
+                permissions::request(Permission::AccessMemory),
+                permissions::denied()
+                    .iter()
+                    .find(|(permission, _)| *permission == Permission::AccessMemory)
+                    .map(|(_, reason)| reason.clone()),
+            );
+            info!(
+                "permissions: grant(AccessMemory)={} grant(CameraControl)={} revoked(CameraControl)={} restrict(CameraControl)={} grant again={}",
+                permissions::grant(Permission::AccessMemory),
+                permissions::grant(Permission::OpenUrls),
+                permissions::revoke(Permission::OpenUrls),
+                permissions::restrict(Permission::OpenUrls),
+                permissions::grant(Permission::OpenUrls),
+            );
+            info!(
+                "permissions: prompt_user(ReadGameState)={} set_trust(Trusted)={} set_trust(Untrusted)={} now={}",
+                permissions::prompt_user(Permission::ReadGameState),
+                permissions::set_trust_level(TrustLevel::Trusted),
+                permissions::set_trust_level(TrustLevel::Untrusted),
+                permissions::get_trust_level(),
+            );
+            permissions::record_access(Permission::ReadFiles, "read the config at load");
+            info!(
+                "permissions: list={} policy={:?} for core_lib={:?} audit={} lines",
+                permissions::list().len(),
+                permissions::get_policy()
+                    .iter()
+                    .filter(|(permission, _)| *permission == Permission::AccessMemory
+                        || *permission == Permission::ReadFiles)
+                    .map(|(permission, grant)| (permission.as_str(), grant.to_string()))
+                    .collect::<Vec<_>>(),
+                permissions::list_for_mod("core_lib"),
+                permissions::get_audit_log().len(),
+            );
+            for line in permissions::report() {
+                info!("permissions: {line}");
+            }
+            info!(
+                "permissions: registered={} unregister={}",
+                permissions::register(Permission::OpenUrls),
+                permissions::unregister(Permission::OpenUrls),
+            );
+        });
+
+        // // Section 11: the mod's own files, and a key/value store beside its config. — one group per tick: every section doing its work inside one
+        // hook callback at once is what trips the hook layer (see AGENTS.md).
+        tasks::schedule_after_ticks(6, move || {
+            // Section 11: the mod's own files, and a key/value store beside its config.
+            info!(
+                "fs: root={:?} create={:?} write={:?}",
+                fs::root(),
+                fs::create_directories("cache"),
+                fs::write_text("cache/last-run.txt", "hello from the example"),
+            );
+            info!(
+                "fs: exists={} is_file={} is_directory={} text={:?} bytes={:?}",
+                fs::exists("cache/last-run.txt"),
+                fs::is_file("cache/last-run.txt"),
+                fs::is_directory("cache"),
+                fs::read_text("cache/last-run.txt"),
+                fs::read_bytes("cache/last-run.txt").map(|bytes| bytes.len()),
+            );
+            info!("fs: append={:?}", fs::append("cache/last-run.txt", b" again"));
+            info!(
+                "fs: escape refusals: {:?} {:?}",
+                fs::read_text("../outside.txt").err(),
+                fs::write_text("/etc/cinnaloader-probe", "no"),
+            );
+            info!(
+                "fs: copy={:?} rename={:?} size={} modified={:?}",
+                fs::copy("cache/last-run.txt", "cache/second.txt", true),
+                fs::rename("cache/second.txt", "cache/third.txt"),
+                fs::file_size("cache/third.txt"),
+                fs::modified_time("cache/third.txt").is_some(),
+            );
+            info!(
+                "fs: list={:?} walk={} metadata={:?}",
+                fs::list("cache").map(|entries| entries.len()),
+                fs::walk("cache").map(|entries| entries.len()).unwrap_or_default(),
+                fs::metadata("cache/last-run.txt").map(|meta| (meta.size, meta.is_file, meta.age().is_some())),
+            );
+            info!(
+                "fs: canonical={:?} hash={:?} identical={} delete={:?}",
+                fs::canonicalize("cache/third.txt"),
+                fs::hash("cache/third.txt"),
+                fs::identical("cache/last-run.txt", "cache/third.txt"),
+                fs::delete("cache/third.txt"),
+            );
+            info!(
+                "fs: atomic_write={:?} read back={:?}",
+                fs::atomic_write("cache/atomic.txt", b"written atomically"),
+                fs::read_text("cache/atomic.txt"),
+            );
+            let mut handle = fs::open_write("cache/streamed.txt").unwrap_or_else(|_| {
+                fs::open_read("cache/atomic.txt").expect("the file that was just written")
+            });
+            let _ = handle.write(b"streamed through a handle");
+            let _ = handle.flush();
+            info!(
+                "fs: handle path={} read back={:?}",
+                handle.path().display(),
+                fs::read_text("cache/streamed.txt"),
+            );
+            info!(
+                "fs: temp file={:?} temp dir={:?} watch={:?} watch_count={} unwatch={}",
+                fs::temporary_file(Some("cache")).map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
+                fs::temporary_directory(Some("cache")).map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
+                fs::watch("cache/atomic.txt", |path, _| info!("fs: watched {} change", path.display())).map(|_| ()),
+                fs::watch_count(),
+                fs::unwatch(1),
+            );
+            let packed = fs::compress(b"aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbcc");
+            info!(
+                "fs: compressed {} bytes to {} and back to {:?}",
+                34,
+                packed.len(),
+                fs::decompress(&packed).map(|bytes| bytes.len()),
+            );
+            info!(
+                "storage: open={:?} set={} flush={:?} keys={:?}",
+                storage::open("seen"),
+                storage::set("blocks", ConfigValue::Integer(42)),
+                storage::flush(),
+                storage::keys(""),
+            );
+            let world = storage::namespace("world");
+            world.set("spawn", ConfigValue::Text("0,64,0".to_owned()));
+            info!(
+                "storage: version={:?} get(blocks)={:?} namespaced={:?} all={}",
+                storage::version(),
+                storage::get("blocks"),
+                world.get("spawn"),
+                storage::keys("").len(),
+            );
+            let mut batch = storage::transaction().unwrap();
+            storage::set("blocks", ConfigValue::Integer(7));
+            info!("storage: inside a batch blocks={:?} rollback={}", storage::get("blocks"), batch.rollback());
+            info!("storage: after rollback blocks={:?}", storage::get("blocks"));
+            storage::set("blocks", ConfigValue::Integer(43));
+            info!(
+                "storage: migrate={:?} version={:?} delete={} contains={} clear={}",
+                storage::migrate("2", |values| {
+                    if let Some(value) = values.remove("old") {
+                        values.insert("renewed".to_owned(), value);
+                    }
+                }),
+                storage::version(),
+                storage::delete("nothing"),
+                storage::contains("blocks"),
+                storage::clear(),
+            );
+            storage::set("blocks", ConfigValue::Integer(44));
+            info!(
+                "storage: flush={:?} backup={:?} restore={:?} stores={:?} close={} open_database={:?}",
+                storage::flush(),
+                storage::backup().map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned())),
+                storage::restore(),
+                storage::stores(),
+                storage::close(),
+                storage::open_database("log"),
+            );
+            info!(
+                "storage: packed open={:?} set={} flush={:?} close={}",
+                storage::open("tidy.packed"),
+                storage::set("note", ConfigValue::Text("packed".to_owned())),
+                storage::flush(),
+                storage::close(),
+            );
+            info!(
+                "storage: format round trip get={:?} stores={:?}",
+                storage::open("tidy.packed").map(|_| storage::get("note")),
+                storage::stores(),
+            );
+            storage::close();
+        });
+
+        // // Section 12: resources by id, over a stack of packs. — one group per tick: every section doing its work inside one
+        // hook callback at once is what trips the hook layer (see AGENTS.md).
+        tasks::schedule_after_ticks(8, move || {
+            // Section 12: resources by id, over a stack of packs.
+            let mut own = ResourcePack::memory("hello-demo", 5).namespace("hello");
+            own.insert("textures/gui/menu.png", b"png bytes".to_vec());
+            own.insert("lang/en_us.txt", b"greeting=hi there".to_vec());
+            resources::register_pack(own);
+            let mut weaker = ResourcePack::memory("hello-weaker", 1).namespace("hello");
+            weaker.insert("lang/en_us.txt", b"greeting=low priority".to_vec());
+            resources::register_pack(weaker);
+            let mut overlay = ResourcePack::memory("hello-overlay", 20).namespace("hello");
+            overlay.insert("data/thing.json", b"{\"overlay\":true}".to_vec());
+            resources::register_pack(overlay);
+            info!(
+                "resources: registered={} packs={:?} stack={:?}",
+                resources::register(
+                    &"hello:textures/extra.png".parse().unwrap_or_else(|_| unreachable!()),
+                    b"registered at runtime".to_vec()
+                ),
+                resources::get_active_packs(),
+                resources::get_resource_stack(),
+            );
+            let menu = "hello:textures/gui/menu.png".parse::<ResourceId>().ok();
+            let lang = "hello:lang/en_us.txt".parse::<ResourceId>().ok();
+            info!(
+                "resources: exists={:?} text={:?} bytes={:?} metadata={:?}",
+                menu.as_ref().map(resources::exists),
+                lang.as_ref().and_then(resources::read_text),
+                lang.as_ref().and_then(resources::read_bytes).map(|bytes| bytes.len()),
+                menu.as_ref().and_then(resources::metadata),
+            );
+            info!(
+                "resources: list={} find={} overrides={:?}",
+                resources::list("hello").len(),
+                resources::find("hello:lang/*").len(),
+                resources::get_overrides()
+                    .into_iter()
+                    .map(|over| over.id.to_string())
+                    .collect::<Vec<_>>(),
+            );
+            info!(
+                "resources: namespaces={:?} priorities={:?} set_priority={} now={:?}",
+                resources::get_namespace(&lang.clone().unwrap()),
+                [
+                    resources::get_priority("hello-overlay"),
+                    resources::get_priority("hello-demo"),
+                ],
+                resources::set_priority("hello-weaker", 30),
+                resources::get_priority("hello-weaker"),
+            );
+            let fired = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+            let counter = std::sync::Arc::clone(&fired);
+            resources::add_reload_listener("hello:cache", &["hello"], move || {
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            });
+            resources::watch(&lang.clone().unwrap(), |id| info!("resources: watched {id} reload"));
+            info!(
+                "resources: reload={} namespace reload={} listeners={:?} fired={} count={}",
+                resources::reload(),
+                resources::reload_namespace("hello"),
+                resources::get_reload_listeners(),
+                fired.load(std::sync::atomic::Ordering::Relaxed),
+                resources::reload_count(),
+            );
+            resources::depend(ResourceDependency {
+                id: "hello:textures/absent.png".parse().unwrap(),
+                required_by: "hello-mod".to_owned(),
+                optional: false,
+            });
+            info!(
+                "resources: validate={:?} missing={:?} errors={:?}",
+                resources::validate(),
+                resources::get_missing_resources()
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>(),
+                resources::get_loading_errors().len(),
+            );
+            info!(
+                "resources: own_pack={:?} assets={:?} unregister={:?} unregister_pack={:?}",
+                resources::own_pack().map(|pack| pack.name),
+                resources::assets_directory().is_some(),
+                menu.as_ref().map(resources::unregister),
+                resources::unregister_pack("hello-overlay"),
+            );
+        });
+
+        // // Section 13: keys in the languages this mod ships. — one group per tick: every section doing its work inside one
+        // hook callback at once is what trips the hook layer (see AGENTS.md).
+        tasks::schedule_after_ticks(10, move || {
+            // Section 13: keys in the languages this mod ships.
+            fs::write_text(
+                "assets/lang/en_us.txt",
+                "hello=Hello, {0}!\napples=one apple|{0} apples\nbye=Bye\n",
+            )
+            .ok();
+            fs::write_text(
+                "assets/lang/de_de.txt",
+                "hello=Hallo, {0}!\napples=ein Apfel|{0} Äpfel\n",
+            )
+            .ok();
+            resources::register_pack(
+                ResourcePack::directory("hello-mod-assets", "assets", 50).namespace("hello"),
+            );
+            i18n::register_language("en_us", "English");
+            i18n::register_language("de_de", "Deutsch");
+            info!(
+                "i18n: languages={:?} current={} fallback={} read={}",
+                i18n::get_languages()
+                    .into_iter()
+                    .map(|language| language.code)
+                    .collect::<Vec<_>>(),
+                i18n::get_current_language(),
+                i18n::get_fallback_language(),
+                i18n::reload(),
+            );
+            let heard = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+            let counter = std::sync::Arc::clone(&heard);
+            i18n::on_language_changed(move |_| {
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            });
+            info!(
+                "i18n: set(de_de)={} current={} translate={:?} with_args={:?} plural1={:?} plural4={:?}",
+                i18n::set_current_language("de_de"),
+                i18n::get_current_language(),
+                i18n::translate("hello"),
+                i18n::translate_with("hello", &["Welt"]),
+                i18n::translate_plural("apples", 1),
+                i18n::translate_plural("apples", 4),
+            );
+            info!(
+                "i18n: has(hello)={} has(bye)={} get(bye)={:?} in_de={:?} watchers={}",
+                i18n::has_translation("hello"),
+                i18n::has_translation("bye"),
+                i18n::get_translation("bye"),
+                i18n::get_translation_in("de_de", "hello"),
+                i18n::watcher_count(),
+            );
+            i18n::set_fallback_language("en_us");
+            info!(
+                "i18n: formats number={:?} number_de={:?} date={:?} time={:?} duration={:?} currency={:?}",
+                i18n::format_number(1234567.5),
+                i18n::format_number_in("de_de", 1234567.5),
+                i18n::format_date(1_700_000_000),
+                i18n::format_time(86_400 + 3661),
+                i18n::format_duration(3_723_000),
+                i18n::format_currency(12.5, "usd"),
+            );
+            i18n::register_translations("fr_fr", &[("hello", "Bonjour, {0} !")]);
+            info!(
+                "i18n: unregister_translations(fr_fr)={} unregister_language(fr_fr)={} languages={} resource_id={:?}",
+                i18n::unregister_translations("fr_fr"),
+                i18n::unregister_language("fr_fr"),
+                i18n::get_languages().len(),
+                i18n::resource_id_for("en_us").map(|id| id.to_string()),
+            );
+        });
+
+        // // Section 14: what the game is doing, as far as this host can honestly tell. — one group per tick: every section doing its work inside one
+        // hook callback at once is what trips the hook layer (see AGENTS.md).
+        tasks::schedule_after_ticks(12, move || {
+            // Section 14: what the game is doing, as far as this host can honestly tell.
+            info!(
+                "game: running={} version={:?} protocol={:?} multiplayer={} singleplayer={} server={:?} online={}",
+                game::is_running(),
+                game::get_version(),
+                game::get_protocol_version(),
+                game::is_multiplayer(),
+                game::is_singleplayer(),
+                game::current_server(),
+                game::is_online(),
+            );
+            info!(
+                "game: phase={} tick={} frames={} uptime={}s fps={:?} tps={:?} window={:?}",
+                game::current_phase(),
+                game::current_tick(),
+                game::frames(),
+                game::uptime_secs(),
+                game::current_fps(),
+                game::current_tps(),
+                game::get_window(),
+            );
+            info!(
+                "game: session={:?} runtime={:?}",
+                game::get_session_info(),
+                game::get_runtime_info(),
+            );
+            info!(
+                "game: settings={:?} registry={} resources={}",
+                game::get_settings(),
+                game::get_registry_manager().len(),
+                game::get_resource_manager().len(),
+            );
+            info!(
+                "game: unseen: screen={:?} world={:?} player={:?} dimension={:?} mode={:?} paused={:?} menu={:?} in_world={:?} time={:?}",
+                game::current_screen(),
+                game::current_world(),
+                game::current_player(),
+                game::current_dimension(),
+                game::current_game_mode(),
+                game::is_paused(),
+                game::is_in_menu(),
+                game::is_in_world(),
+                game::current_time(),
+            );
+            info!(
+                "game: unreachable: client={:?} server={:?} network={:?} renderer={:?} why={:?}",
+                game::get_client(),
+                game::get_server(),
+                game::get_network_manager(),
+                game::get_world_renderer(),
+                game::why_unknown("world"),
+            );
+            info!(
+                "game: requests: disconnect={} world_reload={} resource_reload={} shutdown={} log={:?}",
+                game::request_disconnect(),
+                game::request_world_reload(),
+                game::request_resource_reload(),
+                game::request_game_shutdown(),
+                game::get_requests()
+                    .into_iter()
+                    .map(|outcome| format!("{}: {}", outcome.request, outcome.granted))
+                    .collect::<Vec<_>>(),
+            );
+            info!("game: host clock={} slowest_frame={}ms", game::now_unix_seconds(), game::slowest_frame_millis());
+
+            // A hook that cannot run yet, and one that runs as this mod is dropped.
+            defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));
+            register_cleanup(|| info!("lifecycle: cleanup ran while unloading"));
+            // Whatever the user last chose, kept next to the mods.
+            if let Some(name) = config_value("name") {
+                info!("hello-mod remembered {name}");
+            } else {
+                set_config("name", "hello-mod");
+            }
+            info!("hello-mod initialised (mods from {})", mods_dir().unwrap_or("?"));
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

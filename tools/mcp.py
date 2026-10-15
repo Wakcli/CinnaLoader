@@ -72,6 +72,8 @@ def launch(mcp, args=None, env=None):
         "LD_PRELOAD": PRELOAD,
         "CINNALOADER_DIR": MODS,
         "CINNALOADER_MENU_OPEN": "1",
+        # The client has no way to be asked its window size, so the launcher that knows says.
+        "CINNALOADER_WINDOW": "1280x720",
     }
     # Anything already in this environment wins, so a run can be repeated with the menu
     # closed (`CINNALOADER_MENU_OPEN=0 ... launch`) or pointed at another mods directory.

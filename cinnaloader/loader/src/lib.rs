@@ -341,6 +341,8 @@ pub fn host_facts() -> HostFacts {
             api_version: cinnaloader::ABI_VERSION,
             loader_version: LOADER_VERSION.to_owned(),
             features: loader_features().into_iter().map(str::to_owned).collect(),
+            launch_address: None,
+            window: None,
         })
 }
 

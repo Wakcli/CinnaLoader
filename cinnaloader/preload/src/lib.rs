@@ -92,7 +92,31 @@ fn host_facts() -> cinnaloader::modinfo::HostFacts {
             .iter()
             .map(|name| (*name).to_owned())
             .collect(),
+        launch_address: launch_address(),
+        window: display_size(),
     }
+}
+
+/// The address the client was launched with, read from this process's own command line, so
+/// a mod can tell single-player from multiplayer without the client telling it.
+fn launch_address() -> Option<String> {
+    let command = std::fs::read("/proc/self/cmdline").ok()?;
+    let parts: Vec<String> = command
+        .split(|byte| *byte == 0)
+        .map(|part| String::from_utf8_lossy(part).into_owned())
+        .collect();
+    let at = parts.iter().position(|part| part == "--address")?;
+    parts.get(at + 1).filter(|value| !value.is_empty()).cloned()
+}
+
+/// The window the client draws into, when the launcher told us. There is no way to ask the
+/// client for it, so a launcher that knows sets `CINNALOADER_WINDOW=1280x720` and a mod gets
+/// an answer instead of a guess.
+fn display_size() -> Option<(u32, u32)> {
+    let value = std::env::var("CINNALOADER_WINDOW").ok()?;
+    let (width, height) = value.split_once('x')?;
+    let (width, height) = (width.parse().ok()?, height.parse().ok()?);
+    Some((width, height))
 }
 
 /// The Bedrock version the client's own samples name, or empty when they are not there.

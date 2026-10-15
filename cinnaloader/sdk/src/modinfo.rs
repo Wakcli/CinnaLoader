@@ -1337,6 +1337,10 @@ pub struct HostFacts {
     pub loader_version: String,
     /// Extra features the loader can provide, beyond [`crate::compat::loader_capabilities`].
     pub features: Vec<String>,
+    /// The address the client was launched with, when there was one.
+    pub launch_address: Option<String>,
+    /// The window the client is drawing into, in pixels.
+    pub window: Option<(u32, u32)>,
 }
 
 impl HostFacts {
@@ -1361,6 +1365,12 @@ impl HostFacts {
         push("host_loader_version", &self.loader_version);
         for feature in &self.features {
             push("host_feature", feature);
+        }
+        if let Some(address) = &self.launch_address {
+            push("host_launch_address", address);
+        }
+        if let Some((width, height)) = self.window {
+            push("host_window", &format!("{width}x{height}"));
         }
         out
     }
@@ -1387,6 +1397,12 @@ impl HostFacts {
                 "host_api_version" => facts.api_version = value.parse().unwrap_or(0),
                 "host_loader_version" => facts.loader_version = value,
                 "host_feature" => facts.features.push(value),
+                "host_launch_address" => facts.launch_address = Some(value),
+                "host_window" => {
+                    if let Some((width, height)) = value.split_once('x') {
+                        facts.window = Some((width.parse().unwrap_or(0), height.parse().unwrap_or(0)));
+                    }
+                }
                 _ => {}
             }
         }

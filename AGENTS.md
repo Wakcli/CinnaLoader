@@ -75,16 +75,13 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §10 permissions and sandboxing (commit `a74c5c1`), plus the
-  `new-instructions.md` channel (`tools/instructions.py`, `instruction-log.md`, the loop
-  above). Sections 1–10 are done and verified in a live client; `apis.md` rows 1–10 say
-  `done` and `checklist.md` agrees.
-- **In progress:** starting §11 filesystem and storage.
+- **Last finished:** §14 game and session state. Sections 1–14 are done and verified in a
+  live client; `apis.md` rows 1–14 say `done` and `checklist.md` agrees.
+- **In progress:** starting §15 world and dimension APIs.
 - **Next command:** `python3 tools/instructions.py check`, then read
-  `## 11. Filesystem and storage` in the wishlist and implement it in
-  `cinnaloader/sdk/src` over what the loader already gives a mod (its own directory under
-  the mods directory, and the `filesystem_read`/`filesystem_write` capabilities), verifying
-  in a client run.
+  `## 15. World and dimension APIs` in the wishlist. Expect it to be mostly hooks this host
+  does not have: implement what is observable, and mark the rest in `apis.md` with the
+  reason rather than guessing.
 - **Blocked (carried forward):** keybinds cannot be exercised headlessly (`device_query`
   needs a focused window) and synthetic clicks do not reach the panel, so those stay
   verified-by-CLI-and-unit-test with the reason recorded in the row.
@@ -166,12 +163,14 @@ In practice: the working branch is `dev`. `main` is the base it came from; put w
 - **A killed client faults in the NVIDIA driver on the way out, loader or not.** A vanilla
   client does it too under `SIGTERM`. `tools/mcp.py` asks the client to quit instead of
   killing it, and a coredump is only worth reading when the run ended on its own.
-- **The panel hook is the only hook here whose safety is unproven.** A mod that did heavy
-  work during `load` (a report built inline, several hundred allocations) tripped a wild
-  jump on the first frame — rip in no mapping at all — five times out of five, while the
-  same mod ran cleanly in the CLI, which installs no hooks. Moving that work to the first
-  tick made it stable. If a run dies right after `menu hooked`, suspect the hook layer
-  before the mod, and reproduce in the CLI (`cinnaloader run <mods>`) to tell them apart.
+- **Keep any one mod callback light.** A wild jump — rip in no mapping at all, no
+  backtrace — kills the client when a mod does a lot of work inside a single hook callback:
+  during `load` (which runs from the preload's constructor) or inside one tick (from the
+  frame hook). The same mod runs clean in the CLI, which installs no hooks, so the hook
+  layer is the suspect, and ilhook's `hook_closure_jmp_back` is the one thing between the
+  client's frame and a mod's tick. Work that has to happen should be split across ticks
+  (`tasks::schedule_after_ticks`) rather than done in one go. If a run dies right after
+  `menu hooked` or in the first frames, suspect this before the mod.
 
 ## Cinnabar reference
 
