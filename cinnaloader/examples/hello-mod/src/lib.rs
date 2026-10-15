@@ -52,6 +52,18 @@ mod s92;
 mod s93;
 mod s94;
 
+mod s95;
+mod s96;
+mod s97;
+mod s98;
+mod s99;
+mod s100;
+
+mod s101;
+mod s102;
+mod s103;
+mod s104;
+
 use cinnaloader::prelude::*;
 
 /// Whether a section's demonstration should run: every one of them when nothing is set, or
@@ -5185,6 +5197,42 @@ impl Mod for Hello {
             }
             for line in s94::run() {
                 info!("s94 | {line}");
+            }
+        });
+
+        tasks::schedule_after_ticks(114, move || {
+            for line in s95::run() {
+                info!("s95 | {line}");
+            }
+            for line in s96::run() {
+                info!("s96 | {line}");
+            }
+            for line in s97::run() {
+                info!("s97 | {line}");
+            }
+            for line in s98::run() {
+                info!("s98 | {line}");
+            }
+            for line in s99::run() {
+                info!("s99 | {line}");
+            }
+            for line in s100::run() {
+                info!("s100 | {line}");
+            }
+        });
+
+        tasks::schedule_after_ticks(116, move || {
+            for line in s101::run() {
+                info!("s101 | {line}");
+            }
+            for line in s102::run() {
+                info!("s102 | {line}");
+            }
+            for line in s103::run() {
+                info!("s103 | {line}");
+            }
+            for line in s104::run() {
+                info!("s104 | {line}");
             }
         });
 
