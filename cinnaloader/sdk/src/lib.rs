@@ -44,7 +44,9 @@ use std::{
     sync::OnceLock,
 };
 
+pub mod audio;
 pub mod blocks;
+pub mod camera;
 pub mod capability;
 pub mod compat;
 pub mod components;
@@ -85,6 +87,7 @@ pub mod textures;
 pub mod ui;
 pub mod version;
 pub mod world;
+pub mod widget;
 pub mod worldgen;
 
 /// Bumped whenever `HostApi` or any entry-point signature changes. A mod whose
