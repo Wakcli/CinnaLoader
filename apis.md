@@ -44,7 +44,7 @@ guide, not a contract.
 | 6 | Event system | 24 | done | Bus with phases, priorities, filters, once, cancel and stop. Fired by the loader's own phases, so an event means the phase really happened |
 | 7 | Threading and task scheduling | 32 | done | Tick, delayed, repeating, render-phase, worker and pool tasks, with tokens, groups, metrics and thread checks. The rules are in the module docs |
 | 8 | Logging and diagnostics | 38 | done | Levelled log with sinks, filters, history, structured fields and error capture; a report, a health check and a capability report |
-| 9 | Configuration system | 42 | todo |
+| 9 | Configuration system | 42 | done | Typed values with a schema, constraints, migrations, watchers, transactions and import/export/backup. Saved in `<config_dir>/config.ini` |
 | 10 | Mod permissions and sandboxing | 16 | todo |
 | 11 | Filesystem and storage | 47 | todo |
 | 12 | Resource and asset management | 24 | todo |

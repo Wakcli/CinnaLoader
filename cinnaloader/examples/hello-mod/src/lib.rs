@@ -299,12 +299,132 @@ impl Mod for Hello {
         info!("tasks: pool size={}", pool.size());
         self.pool_result = Some(pooled);
 
+        // Section 9: a typed config with a schema, watched and validated.
+        fn rename_corner(config: &mut std::collections::BTreeMap<String, ConfigValue>) {
+            if let Some(value) = config.remove("corner_name") {
+                config.insert("corner_label".to_owned(), value);
+            }
+        }
+        config::register_schema(
+            ConfigSchema::new("hello")
+                .version(env!("CARGO_PKG_VERSION"))
+                .migration(ConfigMigration::new(
+                    "0.0.1",
+                    "0.1.0",
+                    "corner_name became corner_label",
+                    rename_corner,
+                ))
+                .entry(
+                    ConfigEntry::new("greeting", ConfigValue::Text("hello".to_owned()))
+                        .comment("what the mod says when it starts")
+                        .group(ConfigGroup::new("Text", "Display"))
+                        .constraint(config::required())
+                        .constraint(config::max_length(32)),
+                )
+                .entry(
+                    ConfigEntry::new("loudness", ConfigValue::Percentage(50.0))
+                        .comment("how loudly it says it")
+                        .constraint(config::range(0.0, 100.0)),
+                )
+                .entry(
+                    ConfigEntry::new("target", ConfigValue::String("minecraft:stone".to_owned()))
+                        .constraint(config::pattern("minecraft:*"))
+                        .constraint(config::one_of(&["minecraft:stone", "minecraft:dirt"])),
+                )
+                .entry(
+                    ConfigEntry::new("dev_only", ConfigValue::Boolean(false))
+                        .visibility(ConfigVisibility::Development)
+                        .restart(ConfigRestartRequirement::Restart),
+                )
+                .entry(
+                    ConfigEntry::new("enabled_when_demo", ConfigValue::Boolean(true))
+                        .constraint(config::visible_when("loudness", &["100"])),
+                ),
+        );
+        config::register_validator(ConfigValidator::new("loudness must be a step", |config| {
+            match config.get("loudness").and_then(ConfigValue::as_float) {
+                Some(loudness) if (loudness % 5.0).abs() > f64::EPSILON => {
+                    vec![format!("loudness {loudness} is not a multiple of 5")]
+                }
+                _ => Vec::new(),
+            }
+        }));
+        let loaded = config::load();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = std::sync::Arc::clone(&seen);
+        config::watch("greeting", move |key, value| {
+            into.lock().unwrap().push(format!("{key}={}", value.render()));
+        });
+        config::on_changed(|all| info!("config: {} keys now", all.len()));
+        info!(
+            "config: loaded={loaded} keys={:?} dirty={} errors={:?}",
+            config::keys(),
+            config::is_dirty(),
+            config::get_errors(),
+        );
+        info!(
+            "config: get(greeting)={:?} get_or(missing)={:?} contains(loudness)={}",
+            config::get("greeting"),
+            config::get_or("missing", ConfigValue::Integer(7)),
+            config::contains("loudness"),
+        );
+        info!(
+            "config: set(greeting)={} set(loudness=61)={} set(bad target)={} errors={:?}",
+            config::set("greeting", ConfigValue::Text("hi there".to_owned())),
+            config::set("loudness", ConfigValue::Percentage(61.0)),
+            config::set("target", ConfigValue::String("other:stone".to_owned())),
+            config::get_errors(),
+        );
+        info!("config: watcher saw {:?}", seen.lock().unwrap());
+        let mut txn = config::transaction();
+        config::set("greeting", ConfigValue::Text("in a transaction".to_owned()));
+        info!("config: inside a transaction get={:?}", config::get("greeting"));
+        info!("config: rollback={}", txn.rollback());
+        info!("config: after rollback get={:?}", config::get("greeting"));
+        info!(
+            "config: defaults={:?} schema={:?} values={}",
+            config::get_defaults().keys().collect::<Vec<_>>(),
+            config::get_schema().map(|schema| schema.entries.len()),
+            config::values().len(),
+        );
+        info!(
+            "config: reset_key(loudness)={} now={:?}",
+            config::reset_key("loudness"),
+            config::get("loudness"),
+        );
+        info!("config: save={} dirty={}", config::save(), config::is_dirty());
+        match config::backup() {
+            Ok(path) => info!("config: backup at {}", path.display()),
+            Err(error) => warn!("config: no backup: {error}"),
+        }
+        match config::export(None) {
+            Ok(path) => info!("config: exported to {}", path.display()),
+            Err(error) => warn!("config: no export: {error}"),
+        }
+        info!("config: reload={} keys={:?}", config::reload(), config::keys());
+        match config::restore() {
+            Ok(count) => info!("config: restored {count} entries"),
+            Err(error) => warn!("config: no restore: {error}"),
+        }
+        let migration_probe = config::migrate("0.0.1", env!("CARGO_PKG_VERSION"));
+        info!(
+            "config: migrate ran {migration_probe} step(s), remove(missing)={}, reset={}",
+            config::remove("nothing_here"),
+            config::reset(),
+        );
+        info!(
+            "config: all={:?} errors={:?} validators={}",
+            config::all().keys().collect::<Vec<_>>(),
+            config::validate(),
+            config::get_errors().len(),
+        );
+
         self.beat = Timer::every(1000);
         // A hook that cannot run yet, and one that runs as this mod is dropped.
         defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));
         register_cleanup(|| info!("lifecycle: cleanup ran while unloading"));
         // Whatever the user last chose, kept next to the mods.
-        if let Some(name) = config("name") {
+        if let Some(name) = config_value("name") {
             info!("hello-mod remembered {name}");
         } else {
             set_config("name", "hello-mod");

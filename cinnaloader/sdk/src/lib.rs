@@ -46,6 +46,7 @@ use std::{
 
 pub mod capability;
 pub mod compat;
+pub mod config;
 pub mod deps;
 pub mod diagnostics;
 pub mod events;
@@ -627,6 +628,13 @@ pub fn config(key: &str) -> Option<String> {
             .to_string_lossy()
             .into_owned(),
     )
+}
+
+/// The same as [`config`], under a name that cannot collide with the [`config`] module when
+/// both are in scope.
+#[must_use]
+pub fn config_value(key: &str) -> Option<String> {
+    config(key)
 }
 
 /// Saves a mod-private value next to the mods.
@@ -1219,6 +1227,11 @@ pub mod prelude {
     };
     pub use crate::capability::{self as capabilities, Capability};
     pub use crate::compat;
+    pub use crate::config::{
+        self as config, ConfigCategory, ConfigComment, ConfigConstraint, ConfigEntry, ConfigGroup,
+        ConfigMigration, ConfigRestartRequirement, ConfigSchema, ConfigType, ConfigValidator,
+        ConfigValue, ConfigVisibility, Transaction,
+    };
     pub use crate::deps::{
         CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
         LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
@@ -1249,7 +1262,8 @@ pub mod prelude {
         VersionReq,
     };
     pub use crate::{
-        button, choice, choice_index, config, enabled, error, export_mod, feature, hosted_api_version, info, key,
+        button, choice, choice_index, config_value, enabled, error, export_mod, feature,
+        hosted_api_version, info, key,
         keybind, meta, mods_dir, number, overlay_line, set_config, set_enabled, set_number,
         slider, toggle_gui, warn, Mod, Timer, OFF, ON,
     };
