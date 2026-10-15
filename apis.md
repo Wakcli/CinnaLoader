@@ -480,6 +480,30 @@ blocks away, face `(-1, 0, 0)`; the entity query found `wisp` with `far` behind 
 `wisp` excluded found `far`; a camera pick had range 12; and a sweep of a body stopped at the
 wall.
 
+### 25 — Movement and locomotion
+
+The game's movement numbers are published as defaults — walking `0.1`, sprinting `0.13`,
+sneaking `0.03`, flying `0.05`, swimming `0.02`, jump strength `0.42`, step height `0.6`,
+acceleration — and a mod owns a [`MovementProfile`] of them, which it can change for its own
+prediction without touching the client.
+
+What is real: `Input` as a value, with `vector()` normalising a diagonal the way the game does
+so two keys are not faster than one, opposite keys cancelling, and `is_moving`/`is_sprinting`/
+`is_sneaking`; `speed_for` picking the speed an input asks for (sneak beats sprint, the mode
+decides when nothing is pressed); `jump_height` from the strength and Bedrock's gravity
+(1.102 blocks, which is about what a player clears); `can_step_up` against the step height;
+`predict` for where a body ends up after so many ticks, including rising and diving in flight
+without any horizontal input; and `steps` for the whole path.
+
+Refused with its own reason each time: the live input and its vector, every one of the eight
+speed getters and their setters (a player's speeds are server attributes), the ten
+`jump`/`start_*`/`stop_*`/`set_*_allowed` actions, the client's own prediction and the
+server's correction and authoritative position, and the three `register_*` hooks.
+
+Verified in a live client: the constants; `walk=0.1 sprint=0.13 sneak=0.03`, jump height
+`1.102`, step `0.6`; 20 ticks of walking moving 2.0 blocks and sprinting 2.6; a jump rising to
+`64.63`; flying up `0.25` and down `0.25` in five ticks; and the whole live surface `None`.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside

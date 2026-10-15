@@ -1836,6 +1836,121 @@ impl Mod for Hello {
             );
         });
 
+        // Section 25: movement a mod can predict for itself, and the input the client owns.
+        tasks::schedule_after_ticks(32, move || {
+            let profile = MovementProfile::new();
+            let standing = movement::Input::default();
+            let walking = movement::Input {
+                forward: true,
+                ..movement::Input::default()
+            };
+            let sprinting = movement::Input {
+                sprint: true,
+                ..walking
+            };
+            let sneaking = movement::Input {
+                sneak: true,
+                ..walking
+            };
+            let diagonal = movement::Input {
+                forward: true,
+                right: true,
+                ..movement::Input::default()
+            };
+            info!(
+                "movement: constants={:?} input(forward)={:?} input(diagonal)={:?} standing_moves={}",
+                movement::constants(),
+                walking.vector(),
+                diagonal.vector(),
+                standing.is_moving(),
+            );
+            info!(
+                "movement: speeds walk={} sprint={} sneak={} standing={} jump_height={:.3} step={} can_step_0.7={}",
+                profile.speed_for(&walking),
+                profile.speed_for(&sprinting),
+                profile.speed_for(&sneaking),
+                profile.speed_for(&standing),
+                profile.jump_height(),
+                profile.can_step_up(0.6),
+                profile.can_step_up(0.7),
+            );
+            info!(
+                "movement: predict walk={:?} sprint={:?} jump={:?}",
+                movement::predict(&profile, (0.0, 64.0, 0.0), &walking, 20),
+                movement::predict(&profile, (0.0, 64.0, 0.0), &sprinting, 20),
+                movement::predict(&profile, (0.0, 64.0, 0.0), &movement::Input {
+                    jump: true,
+                    ..walking
+                }, 3),
+            );
+            let mut flying = profile.clone();
+            flying.mode = movement::MovementMode::Flying;
+            flying.flight_allowed = true;
+            info!(
+                "movement: flying mode={} up={:?} down={:?} swim_speed={} riding_speed={}",
+                flying.mode,
+                movement::predict(&flying, (0.0, 64.0, 0.0), &movement::Input {
+                    jump: true,
+                    ..movement::Input::default()
+                }, 5),
+                movement::predict(&flying, (0.0, 64.0, 0.0), &movement::Input {
+                    sneak: true,
+                    ..movement::Input::default()
+                }, 5),
+                movement::MovementMode::Swimming.speed(&profile),
+                movement::MovementMode::Riding.speed(&profile),
+            );
+            let walked = movement::steps(&profile, (0.0, 64.0, 0.0), &walking, 4);
+            info!(
+                "movement: path={:?} first_step={:.3}",
+                walked.iter().map(|step| step.to).collect::<Vec<_>>(),
+                walked[0].distance(),
+            );
+            info!(
+                "movement: live: input={:?} vector={:?} speed={:?} acceleration={:?} jump={:?} step={:?} fly={:?} sprint={:?} swim={:?} sneak={:?}",
+                movement::get_input(),
+                movement::get_input_vector(),
+                movement::get_speed(),
+                movement::get_acceleration(),
+                movement::get_jump_strength(),
+                movement::get_step_height(),
+                movement::get_fly_speed(),
+                movement::get_sprint_speed(),
+                movement::get_swim_speed(),
+                movement::get_sneak_speed(),
+            );
+            info!(
+                "movement: server: prediction={:?} correction={:?} authoritative={:?} predicted={:?} set_prediction={}",
+                movement::get_movement_prediction(),
+                movement::get_server_correction(),
+                movement::get_authoritative_position(),
+                movement::get_predicted_position(),
+                movement::set_movement_prediction(false),
+            );
+            info!(
+                "movement: actions: jump={} sprint={}/{} sneak={}/{} fly={}/{} flight_allowed={} noclip={} mode={}",
+                movement::jump(),
+                movement::start_sprinting(),
+                movement::stop_sprinting(),
+                movement::start_sneaking(),
+                movement::stop_sneaking(),
+                movement::start_flying(),
+                movement::stop_flying(),
+                movement::set_flight_allowed(true),
+                movement::set_noclip_allowed(true),
+                movement::set_movement_mode(movement::MovementMode::Flying),
+            );
+            info!(
+                "movement: set_speed={} set_jump={} hooks={}/{}/{} refusals={:?}",
+                movement::set_speed(1.0),
+                movement::set_jump_strength(1.0),
+                movement::register_movement_modifier("hello:swift"),
+                movement::register_input_handler("hello:keys"),
+                movement::register_collision_modifier("hello:slick"),
+                movement::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

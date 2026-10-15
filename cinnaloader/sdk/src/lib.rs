@@ -64,6 +64,7 @@ pub mod log;
 pub mod metadata;
 pub mod modinfo;
 pub mod mods;
+pub mod movement;
 pub mod permissions;
 pub mod physics;
 pub mod player;
@@ -1291,6 +1292,9 @@ pub mod prelude {
     };
     pub use crate::player::{
         self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics,
+    };
+    pub use crate::movement::{
+        self as movement, Input, MovementMode, MovementProfile, MovementStep,
     };
     pub use crate::permissions::{
         self as permissions, AuditEntry, AuditKind, Grant, TrustLevel,
