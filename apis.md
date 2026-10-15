@@ -56,7 +56,7 @@ guide, not a contract.
 | 18 | Inventory and containers | 50 | done | An `Inventory` value with the client's own slot layout (0-8 hotbar, 9-35 main, 36 offhand, 37-40 armour) and every slot operation; live slots and containers refused with reasons |
 | 19 | Entity system | 82 | done | Entity types mods declare (families, size, health, attributes, components) with the client's live entity world refused name by name, and 18 entity event kinds registered |
 | 20 | Entity components and attributes | 27 | done | Component types and attribute sets a mod owns (fields, validation, serialisation, modifiers applied the game's way); attaching to a live entity refused; the ECS/system names are `n/a` |
-| 21 | Player APIs | 65 | todo |
+| 21 | Player APIs | 65 | done | A `PlayerState` a mod owns (with an `Inventory` and held item from §17-18); the local player's live state refused; `send_message` writes the log and `send_action_bar` the overlay |
 | 22 | Status effects and damage | 29 | todo |
 | 23 | Physics and collision | 35 | todo |
 | 24 | Raycasting and interaction | 32 | todo |
@@ -387,6 +387,31 @@ functions that would add one to the client's engine are the ECS ones.
 Verified in a live client: a glow component registered with a required field, a value set,
 validated twice (once clean, once with a field of the wrong kind), serialised and read back,
 the entity half `None`/`false`, and the attribute half with both modifier kinds.
+
+### 21 — Player APIs
+
+[`PlayerState`] is a value a mod owns, and it is where this section's real half lives: name,
+uuid, display name, game mode, position, rotation, velocity, health and maximum, food,
+saturation, experience, level, score, locale, team, permissions, statistics, advancements,
+effects with their levels and expiry, respawn/spawn/last-death positions, skin, cape,
+profile, the selected hotbar slot, an [`Inventory`] from section 18, and the held stack from
+section 17. Health is clamped, effects replace one of the same name, expired effects drop
+out, statistics add up, and `reset_state` clears what a respawn would.
+
+The local player is the client's, and every question about one is refused with its own
+reason: identity, position, health, inventory, effects, connection and latency, skin and
+cape, input, camera. Sixteen of them, in `refusals()`.
+
+Two "send" calls are real, because this host has somewhere to put them: `send_message` writes
+to the loader's log (not the game's chat — the module says so), and `send_action_bar` writes
+the loader's overlay line, which is this host's closest thing to an action bar, read by the
+external overlay the loader exposes. Titles, sounds, particles and screens need the client's
+UI, audio and renderer, and `give_item`, `take_item`, `apply_effect`, `teleport` and
+`set_game_mode` are the server's; all of them are refused rather than pretended.
+
+Verified in a live client: a player state rendered with all its fields, a 64-torch held item
+and a shield offhand, `de_de` with the team and level, `[chat] hello from the example` in the
+log, every live question `None`, and every authority call `false`.
 
 ## Open: a wild jump on the first frame
 

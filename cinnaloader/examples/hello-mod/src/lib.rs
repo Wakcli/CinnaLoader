@@ -1466,6 +1466,119 @@ impl Mod for Hello {
             );
         });
 
+        // Section 21: a player a mod owns, and the local player it cannot reach.
+        tasks::schedule_after_ticks(26, move || {
+            let mut who = PlayerState::new("Tester")
+                .with_uuid("0000-1111-2222")
+                .with_game_mode(GameMode::Creative)
+                .at(10.0, 70.0, -5.0);
+            who.set_health(17.0);
+            who.set_food_level(18);
+            who.set_saturation(3.5);
+            who.set_experience(0.5);
+            who.set_level(7);
+            who.set_score(42);
+            who.set_locale("de_de");
+            who.set_team(Some("red"));
+            who.set_display_name("Tester (red)");
+            who.set_skin("hello:skin");
+            who.grant(PlayerPermission::Build);
+            who.grant(PlayerPermission::Fly);
+            who.apply_effect(Effect::new("minecraft:speed", 1, 1_000));
+            who.unlock_advancement("minecraft:story/root");
+            who.statistics.set("walk_one_cm", 10);
+            who.statistics.add("walk_one_cm", 5);
+            who.set_profile("xbox_id", "abc");
+            who.inventory_mut()
+                .set_slot(0, Some(ItemStack::new("minecraft:torch", 64)))
+                .ok();
+            who.inventory_mut()
+                .set_slot(inventory::OFFHAND, Some(ItemStack::new("minecraft:shield", 1)))
+                .ok();
+            info!(
+                "player: state={who} uuid={:?} health={}/{} food={} saturation={} exp={} level={} score={} locale={} team={:?} display={:?}",
+                who.uuid,
+                who.health,
+                who.max_health,
+                who.food_level,
+                who.saturation,
+                who.experience,
+                who.level,
+                who.score,
+                who.locale,
+                who.team,
+                who.display_name,
+            );
+            info!(
+                "player: distance={} alive={} full={} mode={:?} held={:?} armor={} offhand={:?} selected={}",
+                who.distance_to((13.0, 74.0, -5.0)),
+                who.is_alive(),
+                who.is_full_health(),
+                who.is_in_game_mode(GameMode::Creative),
+                who.held_item().map(|stack| stack.to_string()),
+                who.armor().into_iter().filter(Option::is_some).count(),
+                who.offhand().map(|stack| stack.item().to_owned()),
+                who.set_selected_slot(3),
+            );
+            info!(
+                "player: effects={:?} active_now={} permissions={:?} has_fly={} advancements={:?} stats={:?} profile={:?}",
+                who.effects.iter().map(|effect| (effect.name.clone(), effect.level())).collect::<Vec<_>>(),
+                who.active_effects(500).len(),
+                who.permissions.iter().map(|permission| permission.as_str()).collect::<Vec<_>>(),
+                who.has_permission(PlayerPermission::Fly),
+                who.advancements,
+                who.statistics.values.keys().collect::<Vec<_>>(),
+                who.profile.keys().collect::<Vec<_>>(),
+            );
+            who.reset_state();
+            let revoked = who.revoke(PlayerPermission::Build);
+            info!(
+                "player: after reset effects={} flying={} sprinting={} revoked={}",
+                who.effects.len(),
+                who.flying,
+                who.sprinting,
+                revoked,
+            );
+            info!(
+                "player: local: get={:?} all={} by_name={:?}",
+                player::get_local(),
+                player::known_only_to_the_client::get_all().len(),
+                player::known_only_to_the_client::get_by_name("Tester"),
+            );
+            info!(
+                "player: connection: latency={:?} ping={:?} state={:?} input={:?} camera={:?} skin={:?} cape={:?} profile={:?}",
+                player::known_only_to_the_client::get_latency(),
+                player::known_only_to_the_client::get_ping(),
+                player::known_only_to_the_client::get_network_state(),
+                player::known_only_to_the_client::get_input_state(),
+                player::known_only_to_the_client::get_camera(),
+                player::known_only_to_the_client::get_skin(),
+                player::known_only_to_the_client::get_cape(),
+                player::known_only_to_the_client::get_profile(),
+            );
+            info!(
+                "player: say: message={} action_bar={} title={} sound={} particle={} open={} close={}",
+                player::send_message("hello from the example"),
+                player::send_action_bar("hello on the overlay"),
+                player::send_title("big", "small"),
+                player::play_sound("minecraft:click"),
+                player::show_particle("minecraft:spark", 0.0, 64.0, 0.0),
+                player::open_screen("inventory"),
+                player::close_screen(),
+            );
+            info!(
+                "player: authority: give={} take={} effect={} remove={} teleport={} mode={} locale={:?} refusals={:?}",
+                player::give_item(&ItemStack::new("minecraft:stone", 1)),
+                player::take_item("minecraft:stone", 1),
+                player::apply_effect(Effect::new("minecraft:speed", 0, 100)),
+                player::remove_effect("minecraft:speed"),
+                player::teleport(0.0, 64.0, 0.0),
+                player::set_game_mode(GameMode::Creative),
+                player::get_locale(),
+                player::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

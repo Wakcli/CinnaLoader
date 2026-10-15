@@ -64,6 +64,7 @@ pub mod metadata;
 pub mod modinfo;
 pub mod mods;
 pub mod permissions;
+pub mod player;
 pub mod resources;
 pub mod storage;
 pub mod world;
@@ -1278,6 +1279,9 @@ pub mod prelude {
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};
     pub use crate::mods;
+    pub use crate::player::{
+        self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics,
+    };
     pub use crate::permissions::{
         self as permissions, AuditEntry, AuditKind, Grant, TrustLevel,
     };
