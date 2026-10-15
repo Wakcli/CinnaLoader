@@ -1382,6 +1382,32 @@ pub use crate::environment::{
         PieceKind, Precipitation, WeatherMachine, WeatherState, WeatherType, MAX_LIGHT,
         MAX_SKY_DARKEN, RAMP_TICKS, SNOW_TEMPERATURE, TICKS_PER_DAY,
     };
+    pub use crate::settings::{
+        self as settings, Profile, Setting, SettingChange, SettingError, SettingSchema,
+    };
+    pub use crate::window::{self as window, Monitor, CLOSE_REQUESTED};
+    pub use crate::platform::{
+    self as platform, AccessibilitySettings, CpuInfo, DisplayInfo, GpuInfo, MemoryInfo,
+    PlatformCapability, PlatformPaths,
+};
+// §67 — manager wires these into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §67 — `Kind` already names serialization::Kind in the prelude, so metrics::Kind is aliased.
+pub use crate::metrics::{self as metrics, Kind as MetricKind, Metric, Stats};
+    pub use crate::profiler::{self as profiler, Section, FRAME_WINDOW};
+pub use crate::debug::{
+        self as debug, Flag, InvariantResult, Readout, Trace, TraceRecord, WatchStats,
+    };
+// §70 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §70 — `pub mod testing;` is already declared. Export the module alias and its types; its
+    // §70 — free functions are reached as `testing::…` (a bare `run`/`run_all` would collide).
+pub use crate::testing::{
+    self as testing, MockConnection, MockEntity, MockInventory, MockPlayer, MockWorld, Outcome,
+    Recorder, Report, TestCase, TestOutcome,
+};
+    pub use crate::memory::{
+        self as memory, AllocError, Arena, ArenaInfo, HeapInfo, Leak, OwnerBytes, OwnerDelta,
+        Pool as MemoryPool, PoolError, PoolStats, PressureEvent, ResourceStats, Slab, SlabInfo,
+    };
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
         State as DrawState, Transform,
