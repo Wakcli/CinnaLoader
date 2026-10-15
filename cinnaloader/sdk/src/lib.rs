@@ -47,6 +47,9 @@ use std::{
 pub mod audio;
 pub mod blocks;
 pub mod camera;
+pub mod channels;
+pub mod chat;
+pub mod commands;
 pub mod capability;
 pub mod compat;
 pub mod components;
