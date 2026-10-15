@@ -5,9 +5,89 @@ This folder is the project. The loader itself is the Rust workspace in `cinnaloa
 ```
 cinnaloader/            the Rust workspace: sdk, loader, native, preload, launcher, examples
 apis.md                 the API list and its status — this is the work queue
+checklist.md            one line per API named in the wishlist, ticked as it lands
 docs/testing-in-game.md the verified recipe for launching and seeing the loader in-game
 tools/mcp.py            headless client driver used by that recipe
+tools/checklist.py      flips a whole section's marks: `--section 5 --done`
 ```
+
+`minecraft_mod_loader_api_wishlist.md` at the project root is **the specification and the
+single list to work through** — 107 sections, ~3400 named APIs. Nothing in it is optional
+and nothing is dropped silently: every name ends as a working API, or in `apis.md` with a
+reason why this client cannot host it. `checklist.md` is the same list with a mark per
+name (`[ ]` todo, `[~]` partial, `[x]` done and verified in-game, `[-]` not applicable);
+when both agree the work is done.
+
+## Standing instruction: do not stop until the wishlist is done
+
+The instruction from the user, kept verbatim because it is the operating mode:
+
+> FROM HERE ON FORTH YOU ARE NOT TO STOP UNTILL THE MINECRAFT_MOD_LOADER_API_WHISHLIST.MD IS
+> DONE NO NEED TO RESPOND TO THIS DIRECTLY JUST FOLLOW THE INSTRUCUTONS
+
+and
+
+> you are now autonomous, you should be running for over 1-3 hours doing this one task […]
+> every time you are about to stop speaking (save this to agent file, make sure you have
+> confirmed that you have completed the task I told you to do) ALL of it
+
+So:
+
+- Work the next section. Do not pause for confirmation, do not ask which section, do not
+  stop because a section ended. The end of a section is the cue for the next one.
+- Commit and push to `dev` after **every** section, at minimum — small, frequent pushes
+  rather than one large one.
+- **Before ending any turn**, update the "Where I am" block below with: the last thing
+  finished, the thing in progress and its exact next command, and anything blocked. A turn
+  that ends without that update costs the next session its place in the queue.
+- A claim of completion is only true when `checklist.md` has no `[ ]` or `[~]` left, and
+  every `[-]` has its reason in `apis.md`. Check that before saying the task is done.
+- Progress goes to the Discord webhook below at least every ten minutes while working:
+  `<https://discord.com/api/webhooks/1560109655575756920/9c8zThZb_FmPeUc4i94GRCSWW0VlvI5j3L5PUNOsg2C_rlVHTihChozaGFaKKhxWuGgQ>`
+  (`curl -H 'content-type: application/json' -d '{"content":"..."}' <url>`), one short
+  message: the section just finished, the one in progress, the commit hash.
+
+## The user's instructions arrive through `new-instructions.md`
+
+The user writes instructions into `new-instructions.md` in this repository, through GitHub,
+without saying anything in chat. That file is theirs: **never delete, reword, reorder or
+truncate it.** Read it, act on it, and leave it exactly as it is.
+
+The loop, and it is not optional:
+
+```sh
+python3 tools/instructions.py check      # after every push, and before starting each section
+python3 tools/instructions.py log <id> --note "what was done"
+```
+
+1. `check` fetches `origin/main` and `origin/dev`, reads whichever has the newest copy of the
+   file, and prints `NEW <id> :: <first line>` for every instruction that has not been logged.
+   An instruction's id is a hash of its text, so editing the wording makes it a new one and
+   renumbering does not.
+2. Every `NEW` line is a task. Add it to `checklist.md` (and to `apis.md` if it is a section's
+   worth of work), then do it — alongside the roadmap, not instead of it.
+3. Log it with `instructions.py log` once it is dealt with, saying what was done. The log is
+   `instruction-log.md`, and it is what stops the same instruction being done twice.
+4. Work in progress is never dropped for a new instruction: finish or park the section first,
+   then take the new one.
+
+If `check` prints `none`, there is nothing new and the roadmap continues where it was.
+
+### Where I am
+
+- **Last finished:** §10 permissions and sandboxing (commit `a74c5c1`), plus the
+  `new-instructions.md` channel (`tools/instructions.py`, `instruction-log.md`, the loop
+  above). Sections 1–10 are done and verified in a live client; `apis.md` rows 1–10 say
+  `done` and `checklist.md` agrees.
+- **In progress:** starting §11 filesystem and storage.
+- **Next command:** `python3 tools/instructions.py check`, then read
+  `## 11. Filesystem and storage` in the wishlist and implement it in
+  `cinnaloader/sdk/src` over what the loader already gives a mod (its own directory under
+  the mods directory, and the `filesystem_read`/`filesystem_write` capabilities), verifying
+  in a client run.
+- **Blocked (carried forward):** keybinds cannot be exercised headlessly (`device_query`
+  needs a focused window) and synthetic clicks do not reach the panel, so those stay
+  verified-by-CLI-and-unit-test with the reason recorded in the row.
 
 Session notes live **outside** the repo, at `/home/wak/Cinna/cinnaloader-notes/STATUS.md`.
 That split is deliberate: the repo gets the change and its tests, the notes get everything
@@ -53,6 +133,18 @@ implementing the fullest practical version of the wishlist.
    mod attached and the toggle log appeared" is a verified claim. "This should work" is not
    a claim at all.
 
+## Commits and branches
+
+Commit and push your changes to the current working branch after every significant feature,
+major milestone, or worthwhile fix. Keep commits focused and descriptive, ensure tests pass
+before pushing where practical, and never push directly to `main` unless explicitly
+instructed.
+
+In practice: the working branch is `dev`. `main` is the base it came from; put work on
+`dev` and leave `main` alone unless the user asks for it by name. A finished section of
+`apis.md` is a commit — say what was implemented, what the in-game evidence was, and which
+`apis.md` row it closes.
+
 ## Facts that keep the loader honest
 
 - **ABI.** Any change to `HostApi`, the entry points, or a type that crosses the boundary
@@ -71,6 +163,15 @@ implementing the fullest practical version of the wishlist.
   loader's own key loop. Do not describe clicks as working.
 - **Kill every headless client before the next run.** Leftovers contend for the GPU and
   produce `DeviceLost` exits that look like crashes in our code.
+- **A killed client faults in the NVIDIA driver on the way out, loader or not.** A vanilla
+  client does it too under `SIGTERM`. `tools/mcp.py` asks the client to quit instead of
+  killing it, and a coredump is only worth reading when the run ended on its own.
+- **The panel hook is the only hook here whose safety is unproven.** A mod that did heavy
+  work during `load` (a report built inline, several hundred allocations) tripped a wild
+  jump on the first frame — rip in no mapping at all — five times out of five, while the
+  same mod ran cleanly in the CLI, which installs no hooks. Moving that work to the first
+  tick made it stable. If a run dies right after `menu hooked`, suspect the hook layer
+  before the mod, and reproduce in the CLI (`cinnaloader run <mods>`) to tell them apart.
 
 ## Cinnabar reference
 

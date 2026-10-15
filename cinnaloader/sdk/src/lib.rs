@@ -44,13 +44,49 @@ use std::{
     sync::OnceLock,
 };
 
+pub mod capability;
+pub mod compat;
+pub mod config;
+pub mod deps;
+pub mod diagnostics;
+pub mod events;
+pub mod fs;
+pub mod i18n;
+pub mod lifecycle;
+pub mod log;
+pub mod metadata;
+pub mod modinfo;
+pub mod mods;
+pub mod permissions;
+pub mod resources;
+pub mod storage;
+pub mod tasks;
+pub mod version;
+
 /// Bumped whenever `HostApi` or any entry-point signature changes. A mod whose
 /// [`Mod`] crate declared a different value is refused at load.
-pub const ABI_VERSION: u32 = 5;
+///
+/// 8: the graph and `mods_command` slots, and a manifest declared before load.
+pub const ABI_VERSION: u32 = 8;
+
+/// One lock for the tests of every module that touches a process-wide registry, so two
+/// tests never drain each other's queue.
+#[cfg(test)]
+pub(crate) mod test_lock {
+    use std::sync::{Mutex, MutexGuard};
+
+    pub fn serial() -> MutexGuard<'static, ()> {
+        static SERIAL: Mutex<()> = Mutex::new(());
+        SERIAL.lock().unwrap_or_else(|error| error.into_inner())
+    }
+}
+
+/// The capability system, under the name the wishlist uses.
+pub use capability as capabilities;
 
 /// Readable spelling for a toggle's `default`.
 pub const ON: bool = true;
-/// Readable spelling for a toggle's `default`.
+/// The other one.
 pub const OFF: bool = false;
 
 pub mod level {
@@ -141,10 +177,14 @@ pub struct HostApi {
         Option<unsafe extern "C" fn(key: *const c_char, out: *mut c_char, capacity: usize) -> i32>,
     /// Stores a mod-private config value.
     pub set_config: Option<unsafe extern "C" fn(key: *const c_char, value: *const c_char) -> i32>,
-    /// Reports the mod's name, version and authors.
-    pub meta: Option<
-        unsafe extern "C" fn(name: *const c_char, version: *const c_char, authors: *const c_char),
-    >,
+    /// Declares this mod's manifest, one `key=value` per line. Returns 1 when accepted.
+    pub declare: Option<unsafe extern "C" fn(text: *const c_char) -> i32>,
+    /// Writes the loader's view of this mod, one `key=value` per line.
+    pub report: Option<unsafe extern "C" fn(out: *mut c_char, capacity: usize) -> i32>,
+    /// Writes the registry and dependency graph, one `key=value` per line.
+    pub graph: Option<unsafe extern "C" fn(out: *mut c_char, capacity: usize) -> i32>,
+    /// Runs one command on another mod: 0 enable, 1 disable, 2 is enabled, 3 is loaded.
+    pub mods_command: Option<unsafe extern "C" fn(verb: u32, id: *const c_char) -> i32>,
 }
 
 /// A rate the loader's tick can drive: `Timer::every(1000)` fires about once a second.
@@ -258,10 +298,10 @@ slot!(
     WRITE_CONFIG,
     unsafe extern "C" fn(*const c_char, *const c_char) -> i32
 );
-slot!(
-    REPORT_META,
-    unsafe extern "C" fn(*const c_char, *const c_char, *const c_char)
-);
+slot!(DECLARE, unsafe extern "C" fn(*const c_char) -> i32);
+slot!(GRAPH, unsafe extern "C" fn(*mut c_char, usize) -> i32);
+slot!(MODS_COMMAND, unsafe extern "C" fn(u32, *const c_char) -> i32);
+slot!(REPORT, unsafe extern "C" fn(*mut c_char, usize) -> i32);
 
 /// Writes one line through the loader, falling back to stderr before `load`.
 pub fn log(level: u32, message: &str) {
@@ -293,7 +333,7 @@ macro_rules! error {
     ($($arg:tt)*) => { $crate::log($crate::level::ERROR, &::std::format!($($arg)*)) };
 }
 
-/// Reports the mod's display name, version and authors; the loader logs them once.
+/// Declares a mod the quick way: a name, a version and an author.
 ///
 /// ```
 /// # use cinnaloader::meta;
@@ -302,24 +342,67 @@ macro_rules! error {
 #[macro_export]
 macro_rules! meta {
     ($name:expr, $version:expr, $authors:expr) => {
-        $crate::report_meta($name, $version, $authors)
+        $crate::metadata::declare(
+            $crate::modinfo::ModManifest::new(env!("CARGO_PKG_NAME"), $name, $version)
+                .author($authors),
+        )
     };
 }
 
-/// [`meta!`]'s implementation.
-pub fn report_meta(name: &str, version: &str, authors: &str) {
-    let Some(report) = REPORT_META.get() else {
-        return;
+/// Hands a declared manifest to the loader. Called by [`metadata::declare`].
+pub(crate) fn install_manifest(manifest: &modinfo::ModManifest) -> bool {
+    let Some(declare) = DECLARE.get() else {
+        return true;
     };
-    let (Ok(name), Ok(version), Ok(authors)) = (
-        CString::new(name),
-        CString::new(version),
-        CString::new(authors),
-    ) else {
-        return;
+    let Ok(text) = CString::new(manifest.encode()) else {
+        return false;
     };
-    // SAFETY: every argument is a live NUL-terminated string for the duration of the call.
-    unsafe { report(name.as_ptr(), version.as_ptr(), authors.as_ptr()) };
+    // SAFETY: `declare` is a loader-owned function pointer, and `text` outlives the call.
+    unsafe { declare(text.as_ptr()) > 0 }
+}
+
+/// The loader's registry and dependency graph, or `None` when no loader is present.
+pub(crate) fn read_graph() -> Option<String> {
+    read_blob(*GRAPH.get()?, 16 * 1024)
+}
+
+/// The loader's command entry point, for the `mods` module.
+pub(crate) fn mods_command() -> Option<unsafe extern "C" fn(u32, *const c_char) -> i32> {
+    MODS_COMMAND.get().copied()
+}
+
+/// Reads a loader-written blob into a string.
+fn read_blob(
+    read: unsafe extern "C" fn(*mut c_char, usize) -> i32,
+    capacity: usize,
+) -> Option<String> {
+    let mut buffer = vec![0 as c_char; capacity];
+    // SAFETY: `read` writes at most `buffer.len()` bytes, NUL-terminated.
+    if unsafe { read(buffer.as_mut_ptr(), buffer.len()) } <= 0 {
+        return None;
+    }
+    // SAFETY: the loader wrote a NUL-terminated blob.
+    Some(
+        unsafe { CStr::from_ptr(buffer.as_ptr()) }
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+/// The loader's view of this mod, or `None` when no loader is present.
+pub(crate) fn read_report() -> Option<String> {
+    let report = REPORT.get()?;
+    let mut buffer = vec![0 as c_char; modinfo::MAX_BYTES * 2];
+    // SAFETY: `report` writes at most `buffer.len()` bytes, NUL-terminated.
+    if unsafe { report(buffer.as_mut_ptr(), buffer.len()) } <= 0 {
+        return None;
+    }
+    // SAFETY: the loader wrote a NUL-terminated report.
+    Some(
+        unsafe { CStr::from_ptr(buffer.as_ptr()) }
+            .to_string_lossy()
+            .into_owned(),
+    )
 }
 
 /// The directory the mods were loaded from, once `load` has run.
@@ -552,6 +635,13 @@ pub fn config(key: &str) -> Option<String> {
     )
 }
 
+/// The same as [`config`], under a name that cannot collide with the [`config`] module when
+/// both are in scope.
+#[must_use]
+pub fn config_value(key: &str) -> Option<String> {
+    config(key)
+}
+
 /// Saves a mod-private value next to the mods.
 pub fn set_config(key: &str, value: &str) {
     let Some(write) = WRITE_CONFIG.get() else {
@@ -666,7 +756,10 @@ pub unsafe fn install(api: *const HostApi) -> i32 {
     store(&TAKE_EVENT, api.take_event);
     store(&READ_CONFIG, api.config);
     store(&WRITE_CONFIG, api.set_config);
-    store(&REPORT_META, api.meta);
+    store(&DECLARE, api.declare);
+    store(&GRAPH, api.graph);
+    store(&MODS_COMMAND, api.mods_command);
+    store(&REPORT, api.report);
     store(&REGISTER_FEATURE, api.feature);
     0
 }
@@ -680,9 +773,53 @@ fn store<T>(slot: &OnceLock<T>, value: Option<T>) {
 
 /// What the loader drives. Every method has a default, so a mod implements only what it
 /// needs.
+///
+/// The phases the loader walks, and what is safe in each, are in [`lifecycle`].
 pub trait Mod: Default + Send + 'static {
-    /// Runs once, after the host table is installed. Register settings here.
+    /// Runs before [`Self::load`]. Returning false refuses this loader, and the mod is not
+    /// loaded at all — the place to gate on a loader version that is too old.
+    fn compatibility(&mut self, _loader: &modinfo::ModVersion) -> bool {
+        true
+    }
+
+    /// Runs once, after the host table is installed. Declare the manifest and register
+    /// settings here.
     fn load(&mut self) {}
+
+    /// Runs at the end of `load` when the mod's version changed since its last run, so it
+    /// can move its own saved data. [`previous_version`] is the version that last ran.
+    fn migrate(&mut self, _from: &modinfo::ModVersion, _to: &modinfo::ModVersion) {}
+
+    /// Runs just before the first tick, once the loader has applied the mod's saved
+    /// settings.
+    fn config_loaded(&mut self) {}
+
+    /// Runs after every mod has loaded.
+    fn initialize(&mut self) {}
+
+    /// Runs immediately after [`Self::initialize`].
+    fn post_initialize(&mut self) {}
+
+    /// Runs once every mod is loaded and initialised.
+    fn ready(&mut self) {}
+
+    /// Runs before [`Self::tick`] each tick.
+    fn tick_start(&mut self, _dt_millis: u32) {}
+
+    /// Runs after [`Self::tick`] each tick.
+    fn tick_end(&mut self, _dt_millis: u32) {}
+
+    /// Runs as the client starts a frame. In-client only; nothing blocking belongs here.
+    fn render_start(&mut self) {}
+
+    /// Runs as the client finishes a frame.
+    fn render_end(&mut self) {}
+
+    /// Runs when the loader catches a panic from this mod. The mod is switched off after.
+    fn error(&mut self, _kind: &str, _message: &str) {}
+
+    /// Runs after [`Self::unload`], as the process goes away.
+    fn shutdown(&mut self) {}
     /// Runs on every loader tick with the milliseconds since the previous one.
     fn tick(&mut self, _dt_millis: u32) {}
     /// Runs as the loader unloads the mod.
@@ -699,6 +836,258 @@ pub trait Mod: Default + Send + 'static {
     fn pressed(&mut self, _id: &str) {}
 }
 
+/// What the host provides, read from the loader's report once.
+static HOST_FACTS: OnceLock<modinfo::HostFacts> = OnceLock::new();
+
+/// The loader, game and process facts. Read once; they do not change while a mod runs.
+#[must_use]
+pub fn host_facts() -> modinfo::HostFacts {
+    HOST_FACTS
+        .get_or_init(|| {
+            let text = read_report().unwrap_or_default();
+            let mut facts = modinfo::HostFacts::decode(&text);
+            if facts.api_version == 0 {
+                facts.api_version = ABI_VERSION;
+            }
+            facts
+        })
+        .clone()
+}
+
+/// The ABI version the loader provides, or the one this SDK was built for.
+#[must_use]
+pub fn hosted_api_version() -> u32 {
+    let api = host_facts().api_version;
+    if api == 0 { ABI_VERSION } else { api }
+}
+
+/// The loader's version, for [`Mod::compatibility`].
+#[must_use]
+pub fn loader_version() -> modinfo::ModVersion {
+    modinfo::ModVersion::parse(&host_facts().loader_version)
+}
+
+/// The migration a declaration asked for, waiting for the end of `load`.
+static PENDING_MIGRATION: OnceLock<(modinfo::ModVersion, modinfo::ModVersion)> = OnceLock::new();
+
+/// Records a declaration for the loader and queues any migration it implies. Called by
+/// [`metadata::declare`].
+#[doc(hidden)]
+pub fn note_declaration(manifest: &modinfo::ModManifest) {
+    if let Some(previous) = lifecycle::previous_version() {
+        if previous != manifest.version {
+            let _ = PENDING_MIGRATION.set((previous, manifest.version.clone()));
+        }
+    }
+}
+
+/// Turns a caught panic into a line worth logging.
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(text) = payload.downcast_ref::<&str>() {
+        (*text).to_owned()
+    } else if let Some(text) = payload.downcast_ref::<String>() {
+        text.clone()
+    } else {
+        "panicked".to_owned()
+    }
+}
+
+/// Runs one phase for a mod, catching a panic so one bad mod does not take the loader with
+/// it. Returns non-zero when the mod panicked, which is the loader's cue to switch it off.
+fn guarded<T: Mod>(
+    module: &mut T,
+    kind: &str,
+    body: impl FnOnce(&mut T) -> bool,
+) -> i32 {
+    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(module)));
+    match caught {
+        Ok(true) => 0,
+        Ok(false) => {
+            log(level::WARN, &format!("{kind} did not run"));
+            0
+        }
+        Err(payload) => {
+            let message = panic_message(payload);
+            log(level::ERROR, &format!("{kind} panicked: {message}"));
+            diagnostics::note_crash(kind, &message);
+            lifecycle::enter(lifecycle::Phase::Error);
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                module.error("panic", &message);
+            }));
+            1
+        }
+    }
+}
+
+/// The body of a mod's `init`. Called by [`export_mod!`].
+#[doc(hidden)]
+pub fn load_body<T: Mod>(module: &mut T) -> i32 {
+    tasks::record_main_thread();
+    let loader = loader_version();
+    let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        !module.compatibility(&loader)
+    }))
+    .unwrap_or(false);
+    if refused {
+        log(level::ERROR, "refused: this mod does not accept this loader");
+        return 2;
+    }
+    let code = guarded(module, "load", |module| {
+        lifecycle::enter(lifecycle::Phase::Load);
+        module.load();
+        true
+    });
+    if code != 0 {
+        return code;
+    }
+    if let Some((from, to)) = PENDING_MIGRATION.get() {
+        log(
+            level::INFO,
+            &format!("migrating saved settings from {from} to {to}"),
+        );
+        let code = guarded(module, "migrate", |module| {
+            module.migrate(from, to);
+            true
+        });
+        if code != 0 {
+            return code;
+        }
+    }
+    lifecycle::record_version(&metadata::manifest().version);
+    // Fired after `load` rather than before it, so a mod that subscribes while loading
+    // still hears that the game started.
+    events::publish(events::Event::new(events::kind::GAME_STARTED).with_text(&metadata::id()));
+    events::dispatch_pending();
+    0
+}
+
+/// The body of a mod's `frame`. Called by [`export_mod!`].
+#[doc(hidden)]
+pub fn frame_body<T: Mod>(module: &mut T, dt_millis: u32, first: bool) -> i32 {
+    if first {
+        // The loader applies saved settings between `load` and this first tick, so this is
+        // the first moment they are in effect.
+        let code = guarded(module, "config_loaded", |module| {
+            module.config_loaded();
+            true
+        });
+        if code != 0 {
+            return code;
+        }
+    }
+    guarded(module, "tick", |module| {
+        while let Some((kind, id, value)) = take_event() {
+            match kind.as_str() {
+                "toggle" => {
+                    events::publish(
+                        events::Event::new(events::kind::SETTINGS_CHANGED)
+                            .with_text(&format!("{id}={value}")),
+                    );
+                    module.toggle(&id, value == "1");
+                }
+                "number" => {
+                    events::publish(
+                        events::Event::new(events::kind::SETTINGS_CHANGED)
+                            .with_value(value.parse().unwrap_or_default())
+                            .with_text(&id),
+                    );
+                    module.slider(&id, value.parse().unwrap_or_default());
+                }
+                "choice" => {
+                    events::publish(
+                        events::Event::new(events::kind::SETTINGS_CHANGED)
+                            .with_count(value.parse().unwrap_or_default())
+                            .with_text(&id),
+                    );
+                    module.choice(&id, value.parse().unwrap_or_default());
+                }
+                "keybind" => {
+                    events::publish(
+                        events::Event::cancellable(events::kind::INPUT)
+                            .with_flag(value == "1")
+                            .with_text(&id),
+                    );
+                    module.keybind(&id, value == "1");
+                }
+                "press" => {
+                    events::publish(
+                        events::Event::cancellable(events::kind::INPUT)
+                            .with_flag(true)
+                            .with_text(&id),
+                    );
+                    module.pressed(&id);
+                }
+                "enabled" | "disabled" => {
+                    let on = kind == "enabled";
+                    events::publish(
+                        events::Event::new(if on {
+                            events::kind::MOD_ENABLED
+                        } else {
+                            events::kind::MOD_DISABLED
+                        })
+                        .with_flag(on)
+                        .with_text(&id)
+                        .from(&id),
+                    );
+                }
+                _ => {}
+            }
+        }
+        lifecycle::enter(lifecycle::Phase::TickStart);
+        module.tick_start(dt_millis);
+        lifecycle::enter(lifecycle::Phase::Tick);
+        module.tick(dt_millis);
+        lifecycle::enter(lifecycle::Phase::TickEnd);
+        module.tick_end(dt_millis);
+        // Whatever was scheduled for this tick runs now, before the frame ends.
+        tasks::run_due(dt_millis);
+        true
+    })
+}
+
+/// The body of a mod's `phase`. Called by [`export_mod!`].
+#[doc(hidden)]
+pub fn phase_body<T: Mod>(module: &mut T, code: u32) -> i32 {
+    let Some(phase) = lifecycle::Phase::from_code(code) else {
+        return 0;
+    };
+    guarded(module, phase.name(), |module| {
+        lifecycle::enter(phase);
+        match phase {
+            lifecycle::Phase::Initialize => module.initialize(),
+            lifecycle::Phase::PostInitialize => module.post_initialize(),
+            lifecycle::Phase::Ready => module.ready(),
+            lifecycle::Phase::RenderStart => module.render_start(),
+            lifecycle::Phase::RenderEnd => module.render_end(),
+            lifecycle::Phase::Shutdown => module.shutdown(),
+            lifecycle::Phase::Error => return false,
+            _ => return false,
+        }
+        true
+    })
+}
+
+/// The body of a mod's `shutdown`. Called by [`export_mod!`].
+#[doc(hidden)]
+pub fn unload_body<T: Mod>(module: &mut T) -> i32 {
+    let code = guarded(module, "unload", |module| {
+        lifecycle::enter(lifecycle::Phase::Unload);
+        module.unload();
+        true
+    });
+    if code != 0 {
+        return code;
+    }
+    lifecycle::run_cleanups();
+    let code = guarded(module, "shutdown", |module| {
+        lifecycle::enter(lifecycle::Phase::Shutdown);
+        module.shutdown();
+        true
+    });
+    lifecycle::run_shutdown_handlers();
+    code
+}
+
 /// Generates the C entry points for a [`Mod`] type.
 ///
 /// ```
@@ -711,6 +1100,48 @@ pub trait Mod: Default + Send + 'static {
 #[macro_export]
 macro_rules! export_mod {
     ($ty:ty) => {
+        $crate::export_mod!($ty, manifest = $crate::modinfo::ModManifest::new(
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION"),
+        ));
+    };
+    ($ty:ty, manifest = $manifest:expr) => {
+        /// The manifest the loader reads *before* this mod is loaded, so it can resolve
+        /// dependencies and decide the load order. This is the same text the mod's
+        /// `manifest()` reports.
+        /// # Safety
+        /// `out` is null or points to `capacity` writable bytes.
+        #[no_mangle]
+        pub unsafe extern "C" fn cinnaloader_manifest(out: *mut i8, capacity: usize) -> i32 {
+            static TEXT: ::std::sync::OnceLock<::std::ffi::CString> =
+                ::std::sync::OnceLock::new();
+            let text = TEXT.get_or_init(|| {
+                let manifest = $manifest;
+                ::std::ffi::CString::new(manifest.encode()).unwrap_or_default()
+            });
+            let bytes = text.as_bytes();
+            if out.is_null() || bytes.len() + 1 > capacity {
+                return 0;
+            }
+            // SAFETY: the caller offered `capacity` writable bytes and the text fits.
+            unsafe {
+                ::std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr(),
+                    out as *mut u8,
+                    bytes.len(),
+                );
+                *out.add(bytes.len()) = 0;
+            }
+            1
+        }
+
+        /// The declared manifest, so `load` can read what the loader already has.
+        #[must_use]
+        #[doc(hidden)]
+        pub fn declared_manifest() -> $crate::modinfo::ModManifest {
+            $manifest
+        }
         static CINNALOADER_MOD: ::std::sync::OnceLock<::std::sync::Mutex<$ty>> =
             ::std::sync::OnceLock::new();
 
@@ -727,8 +1158,12 @@ macro_rules! export_mod {
             if code != 0 {
                 return code;
             }
+            $crate::metadata::adopt($manifest);
             let mut module = <$ty as ::std::default::Default>::default();
-            <$ty as $crate::Mod>::load(&mut module);
+            let code = $crate::load_body(&mut module);
+            if code != 0 {
+                return code;
+            }
             if CINNALOADER_MOD
                 .set(::std::sync::Mutex::new(module))
                 .is_err()
@@ -738,59 +1173,120 @@ macro_rules! export_mod {
             0
         }
 
+        static CINNALOADER_FIRST_TICK: ::std::sync::atomic::AtomicBool =
+            ::std::sync::atomic::AtomicBool::new(true);
+
+        /// One loader tick. Returns non-zero when the mod panicked and should be switched
+        /// off, so one bad mod cannot take the process with it.
         #[no_mangle]
-        pub extern "C" fn cinnaloader_frame(dt_millis: u32) {
-            if let Some(module) = CINNALOADER_MOD.get() {
-                if let Ok(mut module) = module.lock() {
-                    while let Some((kind, id, value)) = $crate::take_event() {
-                        match kind.as_str() {
-                            "toggle" => {
-                                <$ty as $crate::Mod>::toggle(&mut module, &id, value == "1")
-                            }
-                            "number" => {
-                                <$ty as $crate::Mod>::slider(
-                                    &mut module,
-                                    &id,
-                                    value.parse().unwrap_or_default(),
-                                )
-                            }
-                            "choice" => {
-                                <$ty as $crate::Mod>::choice(
-                                    &mut module,
-                                    &id,
-                                    value.parse().unwrap_or_default(),
-                                )
-                            }
-                            "keybind" => {
-                                <$ty as $crate::Mod>::keybind(&mut module, &id, value == "1")
-                            }
-                            "press" => <$ty as $crate::Mod>::pressed(&mut module, &id),
-                            _ => {}
-                        }
-                    }
-                    <$ty as $crate::Mod>::tick(&mut module, dt_millis);
-                }
-            }
+        pub extern "C" fn cinnaloader_frame(dt_millis: u32) -> i32 {
+            let Some(module) = CINNALOADER_MOD.get() else {
+                return 0;
+            };
+            let Ok(mut module) = module.lock() else {
+                return 1;
+            };
+            let first = CINNALOADER_FIRST_TICK.swap(
+                false,
+                ::std::sync::atomic::Ordering::SeqCst,
+            );
+            $crate::frame_body(&mut *module, dt_millis, first)
+        }
+
+        /// One lifecycle phase, as the loader walks them. See `cinnaloader::lifecycle`.
+        #[no_mangle]
+        pub extern "C" fn cinnaloader_phase(code: u32) -> i32 {
+            let Some(module) = CINNALOADER_MOD.get() else {
+                return 0;
+            };
+            let Ok(mut module) = module.lock() else {
+                return 1;
+            };
+            $crate::phase_body(&mut *module, code)
         }
 
         #[no_mangle]
-        pub extern "C" fn cinnaloader_shutdown() {
-            if let Some(module) = CINNALOADER_MOD.get() {
-                if let Ok(mut module) = module.lock() {
-                    <$ty as $crate::Mod>::unload(&mut module);
-                }
-            }
+        pub extern "C" fn cinnaloader_shutdown() -> i32 {
+            let Some(module) = CINNALOADER_MOD.get() else {
+                return 0;
+            };
+            let Ok(mut module) = module.lock() else {
+                return 1;
+            };
+            $crate::unload_body(&mut *module)
         }
     };
 }
 
 /// Everything a mod needs: `use cinnaloader::prelude::*;`
 pub mod prelude {
+    pub use crate::metadata::{
+        authors, build_number, build_timestamp, cache_directory, category,
+        declared_capabilities,
+        config_directory, context, contributors, credits, data_directory, declare, declared,
+        description,
+        directory, entrypoint, environment, git_commit, icon, id, instance, is_development,
+        is_enabled, is_reloading, license, loader_version, manifest, manifest_version, metadata,
+        name, namespace, permissions, plugin_directory, reported, resource_directory, source_url,
+        state,
+        tags, version, website,
+    };
+    pub use crate::capability::{self as capabilities, Capability};
+    pub use crate::compat;
+    pub use crate::config::{
+        self as config, ConfigCategory, ConfigComment, ConfigConstraint, ConfigEntry, ConfigGroup,
+        ConfigMigration, ConfigRestartRequirement, ConfigSchema, ConfigType, ConfigValidator,
+        ConfigValue, ConfigVisibility, Transaction,
+    };
+    pub use crate::deps::{
+        CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
+        LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
+        ResolutionErrorKind, SoftDependency, VersionedDependency,
+    };
+    pub use crate::events::{
+        self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,
+    };
+    pub use crate::fs::{self as fs, File, FsError, Metadata as FileMetadata, Watch};
+    pub use crate::i18n::{self as i18n, Language, NumberStyle};
+    pub use crate::diagnostics;
+    pub use crate::log::{self as log, Level, Logger, Record};
+    pub use crate::mods;
+    pub use crate::permissions::{
+        self as permissions, AuditEntry, AuditKind, Grant, TrustLevel,
+    };
+    pub use crate::resources::{
+        self as resources, Provider, ResourceDependency, ResourceId, ResourceKind,
+        ResourceLocation, ResourceManager, ResourceMetadata, ResourceOverride, ResourcePack,
+        ResourceReloadListener, ResourceStack,
+    };
+    pub use crate::storage::{
+        self as storage, Format, Namespace, Storage, StoreError, StoreTransaction,
+    };
+    pub use crate::tasks::{
+        self as tasks, AsyncResult, CancellationToken, JobGroup, JobQueue, MainThreadExecutor,
+        NetworkExecutor, RenderThreadExecutor, TaskExecutor, TaskHandle, TaskMetrics, TaskPriority,
+        TaskResult, TaskStatus, ThreadAffinity, WorkerPool,
+    };
+    pub use crate::lifecycle::{
+        cancel_pending_hooks, current_phase, defer_until_ready, is_initialized, is_ready,
+        previous_version, register_cleanup, register_shutdown_handler, Phase,
+    };
+    pub use crate::modinfo::{
+        BuildInfo, Environment, ModContext, ModDirectory, ModInfo, ModInstance,
+        ModManifest, ModMetadata, ModNamespace, ModVersion, Permission, State,
+    };
+    pub use crate::version::{
+        ApiStability, CompatibilityReport, CompatibilityRule, DeprecationInfo, FeatureAvailability,
+        FeatureFlag, Version, VersionConstraint, VersionMapping, VersionPredicate, VersionRange,
+        VersionReq,
+    };
     pub use crate::{
-        button, choice, choice_index, config, enabled, error, export_mod, feature, info, key,
-        keybind, log, meta, mods_dir, number, overlay_line, set_config, set_enabled, set_number,
+        button, choice, choice_index, config_value, enabled, error, export_mod, feature,
+        hosted_api_version, info, key,
+        keybind, meta, mods_dir, number, overlay_line, set_config, set_enabled, set_number,
         slider, toggle_gui, warn, Mod, Timer, OFF, ON,
-    };}
+    };
+}
 
 #[cfg(test)]
 mod tests {
@@ -872,13 +1368,16 @@ mod tests {
             take_event: Some(probe_take_event),
             config: None,
             set_config: None,
-            meta: None,
+            declare: None,
+            report: None,
+            graph: None,
+            mods_command: None,
         }
     }
 
     #[test]
     fn abi_version_is_stable() {
-        assert_eq!(ABI_VERSION, 5);
+        assert_eq!(ABI_VERSION, 8);
     }
 
     #[test]
@@ -939,6 +1438,100 @@ mod tests {
             Some(("toggle".to_owned(), "sprint".to_owned(), "1".to_owned()))
         );
         assert_eq!(take_event(), None);
+    }
+
+    #[derive(Default)]
+    struct Recorder {
+        seen: Vec<&'static str>,
+        errors: Vec<String>,
+        boom: bool,
+    }
+
+    impl Mod for Recorder {
+        fn load(&mut self) {
+            self.seen.push("load");
+        }
+        fn initialize(&mut self) {
+            self.seen.push("initialize");
+        }
+        fn post_initialize(&mut self) {
+            self.seen.push("post_initialize");
+        }
+        fn ready(&mut self) {
+            self.seen.push("ready");
+        }
+        fn config_loaded(&mut self) {
+            self.seen.push("config_loaded");
+        }
+        fn tick_start(&mut self, _dt: u32) {
+            self.seen.push("tick_start");
+        }
+        fn tick(&mut self, _dt: u32) {
+            self.seen.push("tick");
+            if self.boom {
+                panic!("boom");
+            }
+        }
+        fn tick_end(&mut self, _dt: u32) {
+            self.seen.push("tick_end");
+        }
+        fn error(&mut self, kind: &str, message: &str) {
+            self.errors.push(format!("{kind}: {message}"));
+        }
+        fn unload(&mut self) {
+            self.seen.push("unload");
+        }
+        fn shutdown(&mut self) {
+            self.seen.push("shutdown");
+        }
+    }
+
+    #[test]
+    fn the_phases_reach_the_mod_in_order() {
+        let mut module = Recorder::default();
+        assert_eq!(load_body(&mut module), 0);
+        assert_eq!(phase_body(&mut module, crate::lifecycle::Phase::Initialize.code()), 0);
+        assert_eq!(
+            phase_body(&mut module, crate::lifecycle::Phase::PostInitialize.code()),
+            0
+        );
+        assert_eq!(phase_body(&mut module, crate::lifecycle::Phase::Ready.code()), 0);
+        assert_eq!(frame_body(&mut module, 16, true), 0, "first tick");
+        assert_eq!(frame_body(&mut module, 16, false), 0, "later tick");
+        assert_eq!(unload_body(&mut module), 0);
+        assert_eq!(
+            module.seen,
+            vec![
+                "load",
+                "initialize",
+                "post_initialize",
+                "ready",
+                "config_loaded",
+                "tick_start",
+                "tick",
+                "tick_end",
+                "tick_start",
+                "tick",
+                "tick_end",
+                "unload",
+                "shutdown",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_panicking_mod_is_reported_and_isolated() {
+        let mut module = Recorder {
+            boom: true,
+            ..Recorder::default()
+        };
+        assert_eq!(frame_body(&mut module, 16, true), 1, "the loader is told");
+        assert_eq!(module.errors, vec!["panic: boom".to_owned()]);
+        assert_eq!(current_error_phase(), crate::lifecycle::Phase::Error);
+    }
+
+    fn current_error_phase() -> crate::lifecycle::Phase {
+        crate::lifecycle::current_phase()
     }
 
     #[test]

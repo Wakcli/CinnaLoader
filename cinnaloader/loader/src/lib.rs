@@ -16,13 +16,19 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use cinnaloader::deps::{DependencyResolver, GraphNode};
+use cinnaloader::lifecycle::Phase;
+use cinnaloader::modinfo::{HostFacts, ModEntrypoint, ModInfo, ModManifest, State};
 use cinnaloader::HostApi;
 use libloading::{Library, Symbol};
 
 type AbiFn = extern "C" fn() -> u32;
 type InitFn = unsafe extern "C" fn(*const HostApi) -> i32;
-type FrameFn = extern "C" fn(u32);
-type ShutdownFn = extern "C" fn();
+type FrameFn = extern "C" fn(u32) -> i32;
+/// `fn(out, capacity) -> i32`, the manifest a mod declares before it is loaded.
+type ManifestFn = unsafe extern "C" fn(*mut c_char, usize) -> i32;
+type PhaseFn = extern "C" fn(u32) -> i32;
+type ShutdownFn = extern "C" fn() -> i32;
 
 /// One mod, kept alive by the library handle beside it.
 struct Loaded {
@@ -35,6 +41,7 @@ struct Loaded {
     /// Kept alive for the pointers the mod captured; never read here.
     _api: Box<HostApi>,
     frame: Option<FrameFn>,
+    phase: Option<PhaseFn>,
     shutdown: Option<ShutdownFn>,
 }
 
@@ -151,6 +158,345 @@ pub fn set_mod_enabled(name: &str, enabled: bool) {
             names.push(name.to_owned());
         }
     }
+    // The mod is told, so its own event bus can say `mod_enabled` or `mod_disabled` rather
+    // than a mod having to poll `is_enabled`.
+    queue(
+        if enabled { "enabled" } else { "disabled" },
+        name,
+        &kind_of(name),
+        String::new(),
+    );
+}
+
+/// The id a mod declared, for an event that names it.
+fn kind_of(name: &str) -> String {
+    records()
+        .lock()
+        .ok()
+        .and_then(|records| {
+            records
+                .iter()
+                .find(|record| record.name == name)
+                .map(|record| record.manifest.id.clone())
+        })
+        .unwrap_or_else(|| name.to_owned())
+}
+
+/// What a mod declared about itself, and where its library came from.
+#[derive(Clone)]
+struct ModRecord {
+    name: String,
+    manifest: ModManifest,
+    library: Option<PathBuf>,
+    /// True while the mod's `load` is running.
+    loading: bool,
+}
+
+static RECORDS: OnceLock<Mutex<Vec<ModRecord>>> = OnceLock::new();
+
+/// Mods the loader switched off after a panic, so one bad mod cannot take the rest down.
+static FAILED: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+
+fn failed() -> &'static Mutex<Vec<String>> {
+    FAILED.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// The process's first [`Host`], for the client's frame boundaries.
+static HOST: OnceLock<Mutex<Option<Host>>> = OnceLock::new();
+
+fn host_slot() -> &'static Mutex<Option<Host>> {
+    HOST.get_or_init(|| Mutex::new(None))
+}
+
+/// Keeps the host where the frame hook can reach it. The preload calls this instead of
+/// keeping the host on its own thread.
+pub fn hand_over(host: Host) {
+    if let Ok(mut slot) = host_slot().lock() {
+        *slot = Some(host);
+    }
+}
+
+/// One client frame: the render phases around one tick. The preload's frame hook calls this
+/// each frame, so mods tick at the client's rate and see frame boundaries.
+pub fn frame(dt_millis: u32) {
+    walk_phase(Phase::RenderStart);
+    if let Ok(mut slot) = host_slot().lock() {
+        if let Some(host) = slot.as_mut() {
+            host.tick(dt_millis);
+        }
+    }
+    walk_phase(Phase::RenderEnd);
+}
+
+/// Hands one phase to every mod. The client's frame hook drives the render phases with it.
+pub fn walk_phase(phase: Phase) {
+    if let Ok(mut slot) = host_slot().lock() {
+        if let Some(host) = slot.as_mut() {
+            host.walk(phase);
+        }
+    }
+}
+
+/// Whether the mod was switched off after a panic.
+#[must_use]
+pub fn mod_failed(name: &str) -> bool {
+    failed()
+        .lock()
+        .map(|names| names.iter().any(|failed| failed == name))
+        .unwrap_or(false)
+}
+
+fn mark_failed(name: &str) {
+    if let Ok(mut names) = failed().lock() {
+        if !names.iter().any(|failed| failed == name) {
+            eprintln!("[cinnaloader] {name} panicked and is switched off");
+            names.push(name.to_owned());
+        }
+    }
+}
+
+/// Records a mod the loader would not load, so the panel can say why it is not running.
+fn mark_refused(name: &str) {
+    if let Ok(mut names) = failed().lock() {
+        if !names.iter().any(|failed| failed == name) {
+            names.push(name.to_owned());
+        }
+    }
+}
+
+fn records() -> &'static Mutex<Vec<ModRecord>> {
+    RECORDS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// The loader's own version, reported to mods that gate on it.
+const LOADER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// What the last resolution decided, for the graph report.
+static ORDER: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static PROBLEMS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static CYCLES: OnceLock<Mutex<Vec<Vec<String>>>> = OnceLock::new();
+
+fn last_order() -> Vec<String> {
+    ORDER.get().and_then(|order| order.lock().ok().map(|order| order.clone())).unwrap_or_default()
+}
+
+fn last_problems() -> Vec<String> {
+    PROBLEMS
+        .get()
+        .and_then(|problems| problems.lock().ok().map(|problems| problems.clone()))
+        .unwrap_or_default()
+}
+
+fn last_cycles() -> Vec<Vec<String>> {
+    CYCLES
+        .get()
+        .and_then(|cycles| cycles.lock().ok().map(|cycles| cycles.clone()))
+        .unwrap_or_default()
+}
+
+/// Records what a resolution decided.
+fn record_resolution(order: Vec<String>, problems: Vec<String>, cycles: Vec<Vec<String>>) {
+    if let Ok(mut slot) = ORDER.get_or_init(|| Mutex::new(Vec::new())).lock() {
+        *slot = order;
+    }
+    if let Ok(mut slot) = PROBLEMS.get_or_init(|| Mutex::new(Vec::new())).lock() {
+        *slot = problems;
+    }
+    if let Ok(mut slot) = CYCLES.get_or_init(|| Mutex::new(Vec::new())).lock() {
+        *slot = cycles;
+    }
+}
+
+/// What this loader can provide, so a mod can ask before offering a feature: one name per
+/// capability this client can really be given.
+fn loader_features() -> Vec<&'static str> {
+    cinnaloader::capability::ALL
+        .iter()
+        .filter(|capability| capability.is_supported())
+        .map(|capability| capability.as_str())
+        .collect()
+}
+
+/// The game and process facts every mod sees. The preload fills in what it can read from
+/// the client; the rest are derived here.
+static FACTS: OnceLock<HostFacts> = OnceLock::new();
+
+/// Records what the client is. Called once, by the preload, once it has looked around.
+pub fn set_host_facts(facts: HostFacts) {
+    let _ = FACTS.set(facts);
+}
+
+/// The loader, game and process facts.
+#[must_use]
+pub fn host_facts() -> HostFacts {
+    FACTS
+        .get()
+        .cloned()
+        .unwrap_or_else(|| HostFacts {
+            game_version: String::new(),
+            game_build: String::new(),
+            game_edition: "bedrock".to_owned(),
+            game_platform: std::env::consts::OS.to_owned(),
+            game_protocol: None,
+            api_version: cinnaloader::ABI_VERSION,
+            loader_version: LOADER_VERSION.to_owned(),
+            features: loader_features().into_iter().map(str::to_owned).collect(),
+        })
+}
+
+/// Records a mod's manifest, or updates the one held under that name.
+fn remember(name: &str, manifest: ModManifest, library: Option<PathBuf>) {
+    if let Ok(mut records) = records().lock() {
+        match records.iter_mut().find(|record| record.name == name) {
+            Some(record) => {
+                record.manifest = manifest;
+                record.library = library.or_else(|| record.library.clone());
+            }
+            None => records.push(ModRecord {
+                name: name.to_owned(),
+                manifest,
+                library,
+                loading: false,
+            }),
+        }
+    }
+}
+
+/// Marks a mod as loading, so a report asked for during `load` says so.
+fn entering_load(name: &str) {
+    if let Ok(mut records) = records().lock() {
+        match records.iter_mut().find(|record| record.name == name) {
+            Some(record) => record.loading = true,
+            None => records.push(ModRecord {
+                name: name.to_owned(),
+                manifest: ModManifest::new(name, name, "0"),
+                library: None,
+                loading: true,
+            }),
+        }
+    }
+}
+
+fn finished_loading(name: &str) {
+    if let Ok(mut records) = records().lock() {
+        let record = records.iter_mut().find(|record| record.name == name);
+        if let Some(record) = record {
+            record.loading = false;
+        }
+    }
+}
+
+/// The trust level a mod is held to: what it asked for, never above what this loader gives
+/// without the user saying otherwise.
+fn clamped_trust(name: &str) -> cinnaloader::permissions::TrustLevel {
+    use cinnaloader::permissions::TrustLevel;
+    declared_manifest(name).trust.min(TrustLevel::Normal)
+}
+
+/// The manifest a mod declared, or a bare one when it declared nothing.
+fn declared_manifest(name: &str) -> ModManifest {
+    records()
+        .lock()
+        .ok()
+        .and_then(|records| {
+            records
+                .iter()
+                .find(|record| record.name == name)
+                .map(|record| record.manifest.clone())
+        })
+        .unwrap_or_else(|| ModManifest::new(name, name, "0"))
+}
+
+/// The loader's view of one mod: its declaration plus what only the loader knows.
+fn mod_info(name: &str) -> ModInfo {
+    let held = records().lock().ok().and_then(|records| {
+        records
+            .iter()
+            .find(|record| record.name == name)
+            .map(|record| (record.library.clone(), record.loading))
+    });
+    let (library, loading) = held.unwrap_or((None, false));
+    let enabled = mod_enabled(name);
+    let state = if mod_failed(name) {
+        State::Failed
+    } else if loading {
+        State::Loading
+    } else if enabled {
+        State::Loaded
+    } else {
+        State::Disabled
+    };
+    ModInfo {
+        manifest: declared_manifest(name),
+        directory: config_dir().map(|dir| dir.join(name)),
+        mod_name: name.to_owned(),
+        state,
+        enabled,
+        reloading: false,
+        library,
+        entrypoint: ModEntrypoint::default(),
+        loader_version: LOADER_VERSION.to_owned(),
+        // What the loader enforces, which is never more than normal unless the user says so.
+        trust: clamped_trust(name),
+    }
+}
+
+/// The mod's identity: its library name, without the `lib` a shared object carries.
+fn name_of(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "mod".into());
+    let shared = matches!(path.extension().and_then(|ext| ext.to_str()), Some("so" | "dylib"));
+    if shared {
+        stem.strip_prefix("lib").unwrap_or(&stem).to_owned()
+    } else {
+        stem
+    }
+}
+
+unsafe extern "C" fn host_declare(text: *const c_char) -> i32 {
+    let Some(mod_name) = current_mod() else {
+        eprintln!("[cinnaloader] a manifest was declared outside a mod's load");
+        return 0;
+    };
+    let text = unsafe { c_text(text) };
+    if text.len() > cinnaloader::modinfo::MAX_BYTES {
+        eprintln!(
+            "[cinnaloader] {mod_name}: manifest is {} bytes, over the {}-byte limit",
+            text.len(),
+            cinnaloader::modinfo::MAX_BYTES
+        );
+        return 0;
+    }
+    let manifest = ModManifest::decode(&text);
+    let authors = if manifest.authors.is_empty() {
+        String::new()
+    } else {
+        format!(", by {}", manifest.authors.join(", "))
+    };
+    let tags = if manifest.tags.is_empty() {
+        String::new()
+    } else {
+        format!(", tags {}", manifest.tags.join(" "))
+    };
+    eprintln!(
+        "[cinnaloader] {mod_name}: {} {} ({}{authors}{tags})",
+        manifest.name,
+        manifest.version,
+        manifest.environment_name(),
+    );
+    remember(&mod_name, manifest, None);
+    1
+}
+
+unsafe extern "C" fn host_report(out: *mut c_char, capacity: usize) -> i32 {
+    let Some(mod_name) = current_mod() else {
+        return 0;
+    };
+    let mut text = mod_info(&mod_name).encode();
+    text.push_str(&host_facts().encode());
+    write_text(Some(text), out, capacity)
 }
 
 /// What kind of control a setting is, and so which panel control draws it.
@@ -223,6 +569,85 @@ pub struct Event {
     pub kind: &'static str,
     pub id: String,
     pub value: String,
+}
+
+/// The registry and dependency graph as text, for a mod that asks about the others.
+unsafe extern "C" fn host_graph(out: *mut c_char, capacity: usize) -> i32 {
+    let mut text = String::new();
+    let mut held = records().lock().map(|records| records.clone()).unwrap_or_default();
+    held.sort_by(|left, right| left.name.cmp(&right.name));
+    for record in held {
+        let info = mod_info(&record.name);
+        text.push_str(&format!(
+            "mod={}|{}|{}|{}|{}\n",
+            record.name,
+            record.manifest.id,
+            record.manifest.version,
+            info.state,
+            u8::from(info.enabled)
+        ));
+        for dependency in &record.manifest.dependencies {
+            text.push_str(&format!(
+                "depends={}|{}|{}|{}\n",
+                record.name, dependency.id, dependency.requirement, dependency.kind
+            ));
+        }
+        for id in &record.manifest.provides {
+            text.push_str(&format!("provides={}|{id}\n", record.name));
+        }
+        for capability in &record.manifest.capabilities {
+            text.push_str(&format!("modcap={}|{}\n", record.name, capability.as_str()));
+        }
+        for permission in &record.manifest.permissions {
+            text.push_str(&format!("modperm={}|{}\n", record.name, permission.as_str()));
+        }
+    }
+    for capability in cinnaloader::capability::ALL {
+        text.push_str(&format!(
+            "capability={}|{}\n",
+            capability.as_str(),
+            u8::from(capability.is_supported())
+        ));
+    }
+    for (index, name) in last_order().iter().enumerate() {
+        text.push_str(&format!("order={name}|{index}\n"));
+    }
+    for problem in last_problems() {
+        text.push_str(&format!("error={}\n", problem.replace('\n', " ")));
+    }
+    for cycle in last_cycles() {
+        text.push_str(&format!("cycle={}\n", cycle.join(",")));
+    }
+    write_text(Some(text), out, capacity)
+}
+
+/// Verbs a mod may ask the loader to run on another mod.
+const CMD_ENABLE: u32 = 0;
+const CMD_DISABLE: u32 = 1;
+const CMD_IS_ENABLED: u32 = 2;
+const CMD_IS_LOADED: u32 = 3;
+
+unsafe extern "C" fn host_mods_command(verb: u32, id: *const c_char) -> i32 {
+    let id = unsafe { c_text(id) };
+    let loaded = records().lock().map(|records| {
+        records
+            .iter()
+            .any(|record| record.name == id || record.manifest.id == id)
+    });
+    let loaded = loaded.unwrap_or(false);
+    match verb {
+        CMD_ENABLE => {
+            set_mod_enabled(&id, true);
+            1
+        }
+        CMD_DISABLE => {
+            set_mod_enabled(&id, false);
+            1
+        }
+        CMD_IS_ENABLED => i32::from(loaded && mod_enabled(&id)),
+        CMD_IS_LOADED => i32::from(loaded),
+        _ => -1,
+    }
 }
 
 static SETTINGS: OnceLock<Mutex<Vec<Setting>>> = OnceLock::new();
@@ -322,7 +747,7 @@ fn register(
 }
 
 /// The text of a NUL-terminated argument, or an empty string.
-unsafe fn text(ptr: *const c_char) -> String {
+unsafe fn c_text(ptr: *const c_char) -> String {
     if ptr.is_null() {
         return String::new();
     }
@@ -336,7 +761,7 @@ unsafe extern "C" fn host_feature(
     category: *const c_char,
     default_on: u32,
 ) -> i32 {
-    let (id, label, category) = unsafe { (text(id), text(label), text(category)) };
+    let (id, label, category) = unsafe { (c_text(id), c_text(label), c_text(category)) };
     let code = register(SettingKind::Toggle, &id, &label, &category, Vec::new());
     if code == 1 {
         // A default is not a user change, so it is applied without queueing an event.
@@ -354,7 +779,7 @@ unsafe extern "C" fn host_slider(
     max: f64,
     step: f64,
 ) -> i32 {
-    let (id, label, category) = unsafe { (text(id), text(label), text(category)) };
+    let (id, label, category) = unsafe { (c_text(id), c_text(label), c_text(category)) };
     if !min.is_finite() || !max.is_finite() || min >= max || !step.is_finite() || step <= 0.0 {
         return 0;
     }
@@ -378,7 +803,7 @@ unsafe extern "C" fn host_choice(
     default_index: u32,
 ) -> i32 {
     let (id, label, category, options) =
-        unsafe { (text(id), text(label), text(category), text(options)) };
+        unsafe { (c_text(id), c_text(label), c_text(category), c_text(options)) };
     let options: Vec<String> = options.split('\n').map(str::to_owned).collect();
     if options.is_empty() || options.len() > 8 {
         return 0;
@@ -399,7 +824,7 @@ unsafe extern "C" fn host_keybind(
     default_key: *const c_char,
 ) -> i32 {
     let (id, label, category, key) =
-        unsafe { (text(id), text(label), text(category), text(default_key)) };
+        unsafe { (c_text(id), c_text(label), c_text(category), c_text(default_key)) };
     let code = register(SettingKind::Keybind, &id, &label, &category, Vec::new());
     if code == 1 {
         with_setting(&id, |setting| setting.key = key.clone());
@@ -412,12 +837,12 @@ unsafe extern "C" fn host_button(
     label: *const c_char,
     category: *const c_char,
 ) -> i32 {
-    let (id, label, category) = unsafe { (text(id), text(label), text(category)) };
+    let (id, label, category) = unsafe { (c_text(id), c_text(label), c_text(category)) };
     register(SettingKind::Button, &id, &label, &category, Vec::new())
 }
 
 unsafe extern "C" fn host_enabled(id: *const c_char) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     settings_registry()
         .lock()
         .ok()
@@ -431,7 +856,7 @@ unsafe extern "C" fn host_enabled(id: *const c_char) -> i32 {
 }
 
 unsafe extern "C" fn host_number(id: *const c_char, value: f64) -> f64 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     let Ok(mut settings) = settings_registry().lock() else {
         return 0.0;
     };
@@ -445,7 +870,7 @@ unsafe extern "C" fn host_number(id: *const c_char, value: f64) -> f64 {
 }
 
 unsafe extern "C" fn host_set_number(id: *const c_char, value: f64) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     if !value.is_finite() || set_setting_value(&id, value.to_string()).is_none() {
         return 0;
     }
@@ -453,7 +878,7 @@ unsafe extern "C" fn host_set_number(id: *const c_char, value: f64) -> i32 {
 }
 
 unsafe extern "C" fn host_choice_index(id: *const c_char) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     settings_registry()
         .lock()
         .ok()
@@ -467,7 +892,7 @@ unsafe extern "C" fn host_choice_index(id: *const c_char) -> i32 {
 }
 
 unsafe extern "C" fn host_key_name(id: *const c_char, out: *mut c_char, capacity: usize) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     write_text(
         settings_registry()
             .lock()
@@ -484,7 +909,7 @@ unsafe extern "C" fn host_key_name(id: *const c_char, out: *mut c_char, capacity
 }
 
 unsafe extern "C" fn host_set_enabled(id: *const c_char, on: u32) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     set_feature_enabled(&id, on != 0);
     1
 }
@@ -505,7 +930,7 @@ unsafe extern "C" fn host_take_event(out: *mut c_char, capacity: usize) -> i32 {
 }
 
 unsafe extern "C" fn host_config(key: *const c_char, out: *mut c_char, capacity: usize) -> i32 {
-    let key = unsafe { text(key) };
+    let key = unsafe { c_text(key) };
     let Some(mod_name) = current_mod() else {
         return 0;
     };
@@ -518,7 +943,7 @@ unsafe extern "C" fn host_config(key: *const c_char, out: *mut c_char, capacity:
 }
 
 unsafe extern "C" fn host_set_config(key: *const c_char, value: *const c_char) -> i32 {
-    let (key, value) = unsafe { (text(key), text(value)) };
+    let (key, value) = unsafe { (c_text(key), c_text(value)) };
     let Some(mod_name) = current_mod() else {
         return 0;
     };
@@ -527,20 +952,13 @@ unsafe extern "C" fn host_set_config(key: *const c_char, value: *const c_char) -
         .filter(|(saved, _)| saved.starts_with('!'))
         .collect();
     let full = format!("!{key}");
-    match values.iter_mut().find(|(saved, _)| saved == &full) {
-        Some(entry) => entry.1 = value,
-        None => values.push((full, value)),
-    }
+    // A hand-edited file may repeat a key; keep exactly one.
+    values.retain(|(saved, _)| saved != &full);
+    values.push((full, value));
     save_config(&mod_name, &values);
     1
 }
 
-unsafe extern "C" fn host_meta(name: *const c_char, version: *const c_char, authors: *const c_char) {
-    let (name, version, authors) = unsafe { (text(name), text(version), text(authors)) };
-    if let Some(mod_name) = current_mod() {
-        eprintln!("[cinnaloader] {mod_name}: {name} {version} by {authors}");
-    }
-}
 
 /// Writes `value` into a caller buffer, returning 1 when it fit and 0 otherwise.
 fn write_text(value: Option<String>, out: *mut c_char, capacity: usize) -> i32 {
@@ -775,6 +1193,9 @@ impl Host {
             dir: dir_c,
             mods: Vec::new(),
         };
+        // Nothing of a mod runs before the order is decided, so a dependency is always
+        // loaded ahead of whatever needs it.
+        let mut candidates = Vec::new();
         for entry in std::fs::read_dir(dir)
             .with_context(|| format!("reading mods directory {}", dir.display()))?
         {
@@ -782,12 +1203,54 @@ impl Host {
             if !is_library(&path) {
                 continue;
             }
-            match host.load_one(&path) {
-                Ok(name) => eprintln!("[cinnaloader] loaded {name} ({})", path.display()),
+            match discover(&path) {
+                Ok(candidate) => candidates.push(candidate),
                 Err(error) => eprintln!("[cinnaloader] skipped {}: {error:#}", path.display()),
             }
         }
+        let mut resolver = DependencyResolver::new();
+        for candidate in &candidates {
+            resolver.add(GraphNode::from_manifest(&candidate.name, &candidate.manifest));
+            remember(
+                &candidate.name,
+                candidate.manifest.clone(),
+                Some(candidate.path.clone()),
+            );
+        }
+        let graph = resolver.resolve();
+        record_resolution(
+            graph.order.clone(),
+            graph.errors.iter().map(ToString::to_string).collect(),
+            graph.cycles.iter().map(|cycle| cycle.cycle.clone()).collect(),
+        );
+        for error in &graph.errors {
+            eprintln!("[cinnaloader] {error}");
+        }
+        for cycle in &graph.cycles {
+            eprintln!("[cinnaloader] {cycle}");
+        }
+        let mut refused: Vec<String> = graph.errors.iter().map(|error| error.mod_name.clone()).collect();
+        refused.extend(graph.cycles.iter().flat_map(|cycle| cycle.cycle.clone()));
+        for name in &refused {
+            mark_refused(name);
+        }
+        for name in &graph.order {
+            let Some(candidate) = candidates.iter().find(|entry| &entry.name == name) else {
+                continue;
+            };
+            match host.load_one(&candidate.path) {
+                Ok(name) => eprintln!("[cinnaloader] loaded {name} ({})", candidate.path.display()),
+                Err(error) => {
+                    eprintln!("[cinnaloader] failed {}: {error:#}", candidate.path.display());
+                    mark_refused(&candidate.name);
+                }
+            }
+        }
         let _ = MOD_NAMES.set(host.mods.iter().map(|module| module.name.clone()).collect());
+        // Now that every mod is loaded, walk the phases that only make sense afterwards.
+        for phase in [Phase::Initialize, Phase::PostInitialize, Phase::Ready] {
+            host.walk(phase);
+        }
         Ok(host)
     }
 
@@ -807,23 +1270,44 @@ impl Host {
         self.mods.is_empty()
     }
 
-    /// Advances every enabled mod's frame by `dt_millis`, delivering that mod's queued
-    /// feature changes first.
+    /// Advances every enabled mod's frame by `dt_millis`. A mod that panics is switched
+    /// off and skipped from then on, so the others keep running.
     pub fn tick(&mut self, dt_millis: u32) {
         for module in &self.mods {
-            if let Some(frame) = module.frame.filter(|_| mod_enabled(&module.name)) {
+            if !mod_enabled(&module.name) || mod_failed(&module.name) {
+                continue;
+            }
+            if let Some(frame) = module.frame {
                 enter_mod(&module.name);
-                frame(dt_millis);
+                let code = frame(dt_millis);
                 leave_mod();
+                if code != 0 {
+                    mark_failed(&module.name);
+                }
+            }
+        }
+    }
+
+    /// Hands one lifecycle phase to every mod that answers it.
+    fn walk(&mut self, phase: Phase) {
+        for module in &self.mods {
+            if !mod_enabled(&module.name) || mod_failed(&module.name) {
+                continue;
+            }
+            let Some(phase_fn) = module.phase else {
+                continue;
+            };
+            enter_mod(&module.name);
+            let code = phase_fn(phase.code());
+            leave_mod();
+            if code != 0 {
+                mark_failed(&module.name);
             }
         }
     }
 
     fn load_one(&mut self, path: &Path) -> Result<String> {
-        let name = path
-            .file_stem()
-            .map(|stem| stem.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "mod".into());
+        let name = name_of(path);
         // SAFETY: loading arbitrary native code is the point of a mod loader; the
         // directory is user-controlled.
         let library =
@@ -840,39 +1324,51 @@ impl Host {
         let init: Symbol<InitFn> = unsafe { library.get(b"cinnaloader_init\0") }
             .context("not a cinnaloader mod: missing `cinnaloader_init`")?;
         let name_c = CString::new(name.as_str()).context("mod name is not a valid path")?;
-        let api = Box::new(HostApi {
-            abi_version: cinnaloader::ABI_VERSION,
-            log: Some(host_log),
-            mods_dir: self.dir.as_ptr(),
-            overlay_line: Some(host_overlay_line),
-            toggle_gui: Some(host_toggle_gui),
-            mod_name: name_c.as_ptr(),
-            feature: Some(host_feature),
-            slider: Some(host_slider),
-            choice: Some(host_choice),
-            keybind: Some(host_keybind),
-            button: Some(host_button),
-            enabled: Some(host_enabled),
-            set_enabled: Some(host_set_enabled),
-            number: Some(host_number),
-            set_number: Some(host_set_number),
-            choice_index: Some(host_choice_index),
-            key_name: Some(host_key_name),
-            take_event: Some(host_take_event),
-            config: Some(host_config),
-            set_config: Some(host_set_config),
-            meta: Some(host_meta),
-        });
+        let api = Box::new(host_api(self.dir.as_ptr(), name_c.as_ptr()));
+        // The discovery pass already recorded what this mod declared, and overwriting that
+        // here would throw the version and dependencies away; only a load that skipped
+        // discovery, as a test does, needs a placeholder.
+        let unknown = records()
+            .lock()
+            .map(|records| !records.iter().any(|record| record.name == name))
+            .unwrap_or(false);
+        if unknown {
+            // Every path a mod works with is relative to its own directory, and this is the one
+        // place that decides what that is.
+        if let Some(directory) = config_dir() {
+            cinnaloader::fs::set_root(directory.join(&name));
+        }
+        remember(&name, ModManifest::new(&name, &name, "0"), Some(path.to_owned()));
+        }
+        entering_load(&name);
         enter_mod(&name);
         // SAFETY: the table outlives every mod call; every callback is `'static`.
         let code = unsafe { init(api.as_ref() as *const HostApi) };
         leave_mod();
+        finished_loading(&name);
         if code != 0 {
             bail!("mod init failed with code {code}");
+        }
+        // The mod has declared its manifest by now, so its requirements can be checked.
+        // A mod asking to be trusted is exactly the mod not to trust: the level is clamped,
+        // and the attempt is written down.
+        let claimed = declared_manifest(&name).trust;
+        if claimed > cinnaloader::permissions::TrustLevel::Normal {
+            eprintln!(
+                "[cinnaloader] {name} asked for trust {}, which is the user's to give: clamped to normal",
+                claimed.as_str()
+            );
+        }
+        let report = cinnaloader::compat::check(&declared_manifest(&name), &host_facts());
+        if !report.is_compatible() {
+            bail!("incompatible: {}", report.failures().join("; "));
         }
         // The mod has registered its settings by now, so its saved values can apply.
         load_settings(&name);
         let frame = unsafe { library.get(b"cinnaloader_frame\0") }
+            .ok()
+            .map(|symbol| *symbol);
+        let phase = unsafe { library.get(b"cinnaloader_phase\0") }
             .ok()
             .map(|symbol| *symbol);
         let shutdown = unsafe { library.get(b"cinnaloader_shutdown\0") }
@@ -885,6 +1381,7 @@ impl Host {
             _name: name_c,
             _api: api,
             frame,
+            phase,
             shutdown,
         });
         Ok(name)
@@ -901,6 +1398,84 @@ impl Drop for Host {
             }
         }
         let _ = &self.dir;
+    }
+}
+
+/// One mod found in the directory, before any of it has run.
+struct Candidate {
+    name: String,
+    manifest: ModManifest,
+    path: PathBuf,
+}
+
+/// Reads what a library says about itself without running any of it: the ABI it was built
+/// for and the manifest it declared at compile time.
+fn discover(path: &Path) -> Result<Candidate> {
+    let name = name_of(path);
+    // SAFETY: loading arbitrary native code is the point of a mod loader; the directory is
+    // user-controlled.
+    let library =
+        unsafe { Library::new(path) }.with_context(|| format!("opening {}", path.display()))?;
+    let abi: Symbol<AbiFn> = unsafe { library.get(b"cinnaloader_abi_version\0") }
+        .context("not a cinnaloader mod: missing `cinnaloader_abi_version`")?;
+    if abi() != cinnaloader::ABI_VERSION {
+        bail!(
+            "ABI mismatch: mod built for {}, loader is {}",
+            abi(),
+            cinnaloader::ABI_VERSION
+        );
+    }
+    let manifest = match unsafe { library.get::<ManifestFn>(b"cinnaloader_manifest\0") } {
+        Ok(declared) => {
+            let mut buffer = vec![0 as c_char; cinnaloader::modinfo::MAX_BYTES];
+            // SAFETY: the mod writes at most `buffer.len()` bytes, and writes less when its
+            // manifest does not fit.
+            let written = unsafe { declared(buffer.as_mut_ptr(), buffer.len()) };
+            if written <= 0 {
+                ModManifest::new(&name, &name, "0")
+            } else {
+                // SAFETY: the mod NUL-terminated what it wrote.
+                let text = unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_string_lossy();
+                ModManifest::decode(&text)
+            }
+        }
+        Err(_) => ModManifest::new(&name, &name, "0"),
+    };
+    Ok(Candidate {
+        name,
+        manifest,
+        path: path.to_owned(),
+    })
+}
+
+/// The callback table one mod is handed. Every function is `'static`, so the table lives as
+/// long as the mod does.
+fn host_api(dir: *const c_char, name: *const c_char) -> HostApi {
+    HostApi {
+        abi_version: cinnaloader::ABI_VERSION,
+        log: Some(host_log),
+        mods_dir: dir,
+        overlay_line: Some(host_overlay_line),
+        toggle_gui: Some(host_toggle_gui),
+        mod_name: name,
+        feature: Some(host_feature),
+        slider: Some(host_slider),
+        choice: Some(host_choice),
+        keybind: Some(host_keybind),
+        button: Some(host_button),
+        enabled: Some(host_enabled),
+        set_enabled: Some(host_set_enabled),
+        number: Some(host_number),
+        set_number: Some(host_set_number),
+        choice_index: Some(host_choice_index),
+        key_name: Some(host_key_name),
+        take_event: Some(host_take_event),
+        config: Some(host_config),
+        set_config: Some(host_set_config),
+        declare: Some(host_declare),
+        report: Some(host_report),
+        graph: Some(host_graph),
+        mods_command: Some(host_mods_command),
     }
 }
 
@@ -924,6 +1499,7 @@ mod tests {
 
     #[test]
     fn a_directory_without_mods_is_empty_not_an_error() {
+        let _serial = serial();
         let dir = std::env::temp_dir().join(format!("cinnaloader-empty-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let host = Host::load_dir(&dir).unwrap();
@@ -933,6 +1509,7 @@ mod tests {
 
     #[test]
     fn non_library_files_are_ignored() {
+        let _serial = serial();
         let dir = std::env::temp_dir().join(format!("cinnaloader-noise-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("readme.txt"), b"not a mod").unwrap();
@@ -946,10 +1523,27 @@ mod tests {
         let _serial = serial();
         let name = format!("cinnaloader-toggle-{}", std::process::id());
         assert!(mod_enabled(&name), "mods start enabled");
+        let _ = take_queued(&name);
         set_mod_enabled(&name, false);
         assert!(!mod_enabled(&name));
+        // The mod is told, so its own bus can say `mod_disabled` without polling.
+        assert_eq!(take_queued(&name), vec![format!("disabled\t{name}\t")]);
         set_mod_enabled(&name, true);
         assert!(mod_enabled(&name));
+        assert_eq!(take_queued(&name), vec![format!("enabled\t{name}\t")]);
+    }
+
+    /// Drains the events queued for one mod, as the mod's own tick would.
+    fn take_queued(name: &str) -> Vec<String> {
+        enter_mod(name);
+        let mut buffer = [0 as c_char; 256];
+        let mut seen = Vec::new();
+        while unsafe { host_take_event(buffer.as_mut_ptr(), buffer.len()) } == 1 {
+            // SAFETY: the host wrote a NUL-terminated event line.
+            seen.push(unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_string_lossy().into_owned());
+        }
+        leave_mod();
+        seen
     }
 
     #[test]
@@ -1005,6 +1599,63 @@ mod tests {
         assert_eq!(unsafe { host_number(id.as_ptr(), f64::NAN) }, 10.0, "clamped to max");
         set_setting_value(&scoped, "-5".to_owned());
         assert_eq!(unsafe { host_number(id.as_ptr(), f64::NAN) }, 0.0, "clamped to min");
+    }
+
+    #[test]
+    fn a_declared_manifest_comes_back_with_the_loaders_facts() {
+        let _serial = serial();
+        let name = format!("cinnaloader-manifest-{}", std::process::id());
+        entering_load(&name);
+        enter_mod(&name);
+        let text = CString::new(
+            "v=1\nid=demo\nname=Demo\nversion=2.1.0\nauthor=me\ntag=test\nlicense=MIT\n",
+        )
+        .unwrap();
+        assert_eq!(unsafe { host_declare(text.as_ptr()) }, 1);
+        let mut buffer = [0 as c_char; cinnaloader::modinfo::MAX_BYTES * 2];
+        assert_eq!(unsafe { host_report(buffer.as_mut_ptr(), buffer.len()) }, 1);
+        leave_mod();
+        finished_loading(&name);
+
+        // SAFETY: the loader wrote a NUL-terminated report.
+        let info = ModInfo::decode(unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_str().unwrap());
+        assert_eq!(info.manifest.name, "Demo");
+        assert_eq!(info.manifest.version.major(), Some(2));
+        assert_eq!(info.manifest.authors, vec!["me".to_owned()]);
+        assert_eq!(info.manifest.license.as_deref(), Some("MIT"));
+        assert_eq!(info.mod_name, name, "the loader keeps its own identity for the mod");
+        assert_eq!(info.state, State::Loading, "asked during load");
+        assert_eq!(info.loader_version, LOADER_VERSION);
+
+        set_mod_enabled(&name, false);
+        enter_mod(&name);
+        assert_eq!(unsafe { host_report(buffer.as_mut_ptr(), buffer.len()) }, 1);
+        leave_mod();
+        // SAFETY: the loader wrote a NUL-terminated report.
+        let info = ModInfo::decode(unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_str().unwrap());
+        assert_eq!(info.state, State::Disabled);
+        assert!(!info.enabled);
+        set_mod_enabled(&name, true);
+    }
+
+    #[test]
+    fn a_failed_mod_is_reported_but_still_enabled() {
+        let _serial = serial();
+        let name = format!("cinnaloader-failed-{}", std::process::id());
+        remember(&name, ModManifest::new(&name, &name, "1.0"), None);
+        assert!(!mod_failed(&name));
+        mark_failed(&name);
+        assert!(mod_failed(&name), "a panic switches the mod off");
+        let info = mod_info(&name);
+        assert_eq!(info.state, State::Failed);
+        assert!(info.enabled, "failed is its own state, not a user toggle");
+    }
+
+    #[test]
+    fn a_mod_identity_drops_the_lib_prefix() {
+        assert_eq!(name_of(Path::new("/mods/libhello_mod.so")), "hello_mod");
+        assert_eq!(name_of(Path::new("/mods/hello.dylib")), "hello");
+        assert_eq!(name_of(Path::new("/mods/hello.dll")), "hello");
     }
 
     #[test]
@@ -1076,5 +1727,83 @@ mod tests {
         assert!(seen[0].starts_with("key\t"));
         assert!(seen[0].ends_with("\t1"));
         assert!(seen[1].ends_with("\t0"));
+    }
+
+    #[test]
+    fn the_capability_table_the_loader_writes_is_what_the_sdk_answers_with() {
+        let _serial = serial();
+        remember(
+            "core_lib",
+            ModManifest::new("core_lib", "Core", "1.2")
+                .capability(cinnaloader::capability::Capability::Render),
+            None,
+        );
+        let dir = CString::new("/tmp").unwrap();
+        let name = CString::new("core_lib").unwrap();
+        let api = host_api(dir.as_ptr(), name.as_ptr());
+        // SAFETY: the table outlives the calls below and every slot is a loader callback.
+        assert_eq!(unsafe { cinnaloader::install(&api) }, 0);
+
+        use cinnaloader::capability::{self as capabilities, Capability as Cap};
+        assert!(capabilities::supported(Cap::Render));
+        assert!(capabilities::supported(Cap::FilesystemRead));
+        assert!(!capabilities::supported(Cap::WorldWrite));
+        assert_eq!(
+            capabilities::why_unsupported(Cap::WorldWrite),
+            "needs hooks into the client's world and entity state"
+        );
+        assert_eq!(
+            cinnaloader::mods::capabilities_of("core_lib"),
+            vec!["render".to_owned()]
+        );
+        assert_eq!(capabilities::provided_by_id(Cap::Render), vec!["core_lib"]);
+        assert_eq!(capabilities::list().len(), 38);
+    }
+
+    #[test]
+    fn the_graph_the_loader_writes_is_the_graph_the_sdk_reads() {
+        let _serial = serial();
+        remember(
+            "core_lib",
+            ModManifest::new("core_lib", "Core", "1.2")
+                .provides("core_lib")
+                .depends_on("hello_mod"),
+            None,
+        );
+        remember(
+            "hello_mod",
+            ModManifest::new("hello_mod", "Hello", "0.1")
+                .depends_on_versioned("core_lib", ">=1.0"),
+            None,
+        );
+        record_resolution(
+            vec!["core_lib".to_owned(), "hello_mod".to_owned()],
+            vec!["hello_mod needs missing_lib, which is not installed".to_owned()],
+            vec![vec!["a".to_owned(), "b".to_owned()]],
+        );
+        let dir = CString::new("/tmp").unwrap();
+        let name = CString::new("hello_mod").unwrap();
+        let api = host_api(dir.as_ptr(), name.as_ptr());
+        // SAFETY: the table is alive for the rest of the test and every slot is a real
+        // loader callback.
+        assert_eq!(unsafe { cinnaloader::install(&api) }, 0);
+
+        let registry = cinnaloader::mods::registry();
+        let core = cinnaloader::mods::get_by_id("core_lib").expect("core_lib is installed");
+        assert_eq!(core.version.to_string(), "1.2");
+        assert_eq!(core.name, "core_lib");
+        assert_eq!(registry.order, vec!["core_lib", "hello_mod"]);
+        assert_eq!(
+            cinnaloader::mods::get_dependencies("hello_mod"),
+            vec!["core_lib"]
+        );
+        assert_eq!(
+            cinnaloader::mods::get_dependents("core_lib"),
+            vec!["hello_mod"]
+        );
+        assert!(cinnaloader::mods::get_load_errors()[0].contains("missing_lib"));
+        assert_eq!(registry.cycles.len(), 1);
+        assert!(cinnaloader::mods::explain_load_order()[1].starts_with("hello_mod after"));
+        assert!(!cinnaloader::mods::validate_dependency_graph().is_empty());
     }
 }

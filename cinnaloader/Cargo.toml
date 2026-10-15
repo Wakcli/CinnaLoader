@@ -1,6 +1,15 @@
 [workspace]
 resolver = "2"
-members = ["sdk", "loader", "native", "preload", "launcher", "examples/hello-mod"]
+members = [
+    "sdk",
+    "loader",
+    "native",
+    "preload",
+    "launcher",
+    "examples/hello-mod",
+    "examples/core-lib",
+    "examples/missing-dep-mod",
+]
 
 [workspace.package]
 version = "0.1.0"

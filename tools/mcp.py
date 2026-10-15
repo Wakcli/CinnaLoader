@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import time
@@ -72,6 +73,11 @@ def launch(mcp, args=None, env=None):
         "CINNALOADER_DIR": MODS,
         "CINNALOADER_MENU_OPEN": "1",
     }
+    # Anything already in this environment wins, so a run can be repeated with the menu
+    # closed (`CINNALOADER_MENU_OPEN=0 ... launch`) or pointed at another mods directory.
+    for key in ("CINNALOADER_DIR", "CINNALOADER_MENU_OPEN", "LD_PRELOAD"):
+        if key in os.environ:
+            environment[key] = os.environ[key]
     environment.update(env or {})
     text = mcp.tool(
         "launch_client",
@@ -113,10 +119,20 @@ def main():
             else:
                 raise SystemExit(f"unknown command {command}")
     finally:
+        # Ask the client to shut down before killing it: SIGTERM lands mid-frame and takes
+        # the NVIDIA driver down with it (a vanilla client does it too), which buries the
+        # run's real evidence under a coredump nobody can use.
         try:
-            mcp.proc.terminate()
+            mcp.tool("quit", {}, timeout=30)
         except Exception:
             pass
+        try:
+            mcp.proc.wait(timeout=15)
+        except Exception:
+            try:
+                mcp.proc.terminate()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
