@@ -77,7 +77,12 @@ def launch(mcp, args=None, env=None):
     }
     # Anything already in this environment wins, so a run can be repeated with the menu
     # closed (`CINNALOADER_MENU_OPEN=0 ... launch`) or pointed at another mods directory.
-    for key in ("CINNALOADER_DIR", "CINNALOADER_MENU_OPEN", "LD_PRELOAD"):
+    for key in (
+        "CINNALOADER_DIR",
+        "CINNALOADER_MENU_OPEN",
+        "CINNALOADER_DEMO",
+        "LD_PRELOAD",
+    ):
         if key in os.environ:
             environment[key] = os.environ[key]
     environment.update(env or {})

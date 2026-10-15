@@ -665,6 +665,33 @@ outline shader with four reflected uniforms across its own source and an include
 `vec4` and a 16-component `mat4`, a define, a variant, a uniform value read back, two passes in
 frame order, 13 hooks, and every client call refused.
 
+### 33 — Texture and sprite APIs
+
+A texture here is real data: its id, dimensions, format and *pixels*, loaded from bytes, from a
+raw file in the mod's own directory or from a resource the mod shipped, with `get_pixel`,
+`set_pixel`, `update_region`, `get_pixels` and `set_pixels` working on them and
+`get_memory_usage` adding the bytes up. The four formats read and write the way they should —
+BGRA storing as BGRA and reading back as RGBA, RGB giving every pixel full alpha, R
+replicating one channel.
+
+An atlas is real too, with a shelf packer: `register_sprite` places sprites across shelves and
+answers where they landed, `get_sprites` lists them, `get_uv` turns a sprite into UVs against
+the atlas size, and `stitch_atlas` counts what it laid out. Animations are real data with a
+duration per frame, and `frame_at` picks the frame a moment falls in, looping. Filter, wrap
+mode, anisotropy and the mipmap flag are recorded.
+
+Refused: uploading to the client's GPU, binding, deleting, reloading and building mipmaps —
+`why_unknown` says a texture reaches the screen through the client's device, which this host
+has no handle on — and the *decoder*: this host has no image decoder, so `load_from_file`
+takes raw pixels and `is_raw_image` says which extensions those are.
+
+Verified in a run of the loader with the mod attached (`cinnaloader run`, which is the CLI
+runner, after the client's hook layer started to crash on repeated runs): pixels loaded and
+read back as `[255, 255, 255, 255]`, a pixel set to `[10, 20, 30, 255]`, a region of two
+written, three sprites placed at `0,0` / `8,0` / `0,8` with UVs `(0, 0, 0.5, 0.5)` and
+`(0, 0.5, 0.5, 1)`, 192 pixels stitched, an animation giving frame 1 at 150 ms and frame 0 at
+400 ms as it loops, and every upload refused.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside
@@ -678,6 +705,17 @@ So the constraint is the hook layer's, not the API's: keep any single callback l
 suspicion is ilhook's `hook_closure_jmp_back` path, which is the one thing between the
 client's frame and a mod's tick. Reproduced and recorded in `cinnaloader-notes/STATUS.md`;
 root-causing it is its own piece of work and does not block the roadmap.
+
+Two things make this cheaper to live with, and both are now in the harness:
+
+* **One section per run.** `examples/hello-mod` guards every demonstration with
+  `CINNALOADER_DEMO=<section>`, so a verification run exercises one section and its log is
+  short. `tools/mcp.py` forwards that variable.
+* **The CLI runner got a clock.** `cinnaloader run <mods> [ticks] [millis per tick]` paces its
+  ticks, which a mod that schedules work for later needs: without pacing, 400 ticks finish in
+  less time than one `schedule_after` delay and nothing scheduled ever fires. With it, a
+  section that runs a few seconds in can be verified without the client at all — which is how
+  section 33 was verified while the client's hook layer was crashing on repeated starts.
 
 Separately: a client killed with `SIGTERM` faults inside the NVIDIA driver on the way out
 whether or not the loader is attached, so `tools/mcp.py` now asks it to quit first and each

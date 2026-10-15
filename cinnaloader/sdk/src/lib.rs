@@ -78,6 +78,7 @@ pub mod resources;
 pub mod shaders;
 pub mod storage;
 pub mod tasks;
+pub mod textures;
 pub mod version;
 pub mod world;
 pub mod worldgen;
@@ -1333,6 +1334,10 @@ pub mod prelude {
         ResourceKind as ResourceMediaKind,
         ResourceLocation, ResourceManager, ResourceMetadata, ResourceOverride, ResourcePack,
         ResourceReloadListener, ResourceStack,
+    };
+    pub use crate::textures::{
+        self as textures, AnimationFrame, Atlas, Filter, Sprite, Texture, TextureFormat,
+        WrapMode,
     };
     pub use crate::world::{
         self as world, dimensions, AmbientProperties, DimensionDescription, DimensionKind,

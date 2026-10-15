@@ -5,6 +5,15 @@ use std::time::Duration;
 
 use cinnaloader::prelude::*;
 
+/// Whether a section's demonstration should run: every one of them when nothing is set, or
+/// the one a run asked for, so a verification run is small and its log is short.
+fn demo(section: u32) -> bool {
+    match std::env::var("CINNALOADER_DEMO") {
+        Ok(wanted) => wanted == "all" || wanted == section.to_string(),
+        Err(_) => true,
+    }
+}
+
 /// Ticks seen, for a log line that would otherwise repeat every frame.
 static TICKS: AtomicU32 = AtomicU32::new(0);
 
@@ -170,7 +179,10 @@ impl Mod for Hello {
         );
         // Diagnostics read after the loader has finished starting up, which is when they
         // say something worth logging.
-        tasks::submit(move || {
+        tasks::schedule_after_ticks(16, move || {
+            if !demo(8) {
+                return;
+            }
             info!("diagnostics: environment={:?}", diagnostics::get_environment());
             info!("diagnostics: runtime={:?}", diagnostics::get_runtime_info());
             info!("diagnostics: game={:?}", diagnostics::get_game_state());
@@ -308,6 +320,9 @@ impl Mod for Hello {
         // // Section 9: a typed config with a schema, watched and validated. — one group per tick: every section doing its work inside one
         // hook callback at once is what trips the hook layer (see AGENTS.md).
         tasks::schedule_after_ticks(2, move || {
+            if !demo(9) {
+                return;
+            }
             // Section 9: a typed config with a schema, watched and validated.
             fn rename_corner(config: &mut std::collections::BTreeMap<String, ConfigValue>) {
                 if let Some(value) = config.remove("corner_name") {
@@ -432,6 +447,9 @@ impl Mod for Hello {
         // // Section 10: what this mod may do, and what it may not. — one group per tick: every section doing its work inside one
         // hook callback at once is what trips the hook layer (see AGENTS.md).
         tasks::schedule_after_ticks(4, move || {
+            if !demo(10) {
+                return;
+            }
             // Section 10: what this mod may do, and what it may not.
             info!(
                 "permissions: trust={} trusted={} declared={:?}",
@@ -496,6 +514,9 @@ impl Mod for Hello {
         // // Section 11: the mod's own files, and a key/value store beside its config. — one group per tick: every section doing its work inside one
         // hook callback at once is what trips the hook layer (see AGENTS.md).
         tasks::schedule_after_ticks(6, move || {
+            if !demo(11) {
+                return;
+            }
             // Section 11: the mod's own files, and a key/value store beside its config.
             info!(
                 "fs: root={:?} create={:?} write={:?}",
@@ -628,6 +649,9 @@ impl Mod for Hello {
         // // Section 12: resources by id, over a stack of packs. — one group per tick: every section doing its work inside one
         // hook callback at once is what trips the hook layer (see AGENTS.md).
         tasks::schedule_after_ticks(8, move || {
+            if !demo(12) {
+                return;
+            }
             // Section 12: resources by id, over a stack of packs.
             let mut own = ResourcePack::memory("hello-demo", 5).namespace("hello");
             own.insert("textures/gui/menu.png", b"png bytes".to_vec());
@@ -716,6 +740,9 @@ impl Mod for Hello {
         // // Section 13: keys in the languages this mod ships. — one group per tick: every section doing its work inside one
         // hook callback at once is what trips the hook layer (see AGENTS.md).
         tasks::schedule_after_ticks(10, move || {
+            if !demo(13) {
+                return;
+            }
             // Section 13: keys in the languages this mod ships.
             fs::write_text(
                 "assets/lang/en_us.txt",
@@ -787,6 +814,9 @@ impl Mod for Hello {
         // // Section 14: what the game is doing, as far as this host can honestly tell. — one group per tick: every section doing its work inside one
         // hook callback at once is what trips the hook layer (see AGENTS.md).
         tasks::schedule_after_ticks(12, move || {
+            if !demo(14) {
+                return;
+            }
             // Section 14: what the game is doing, as far as this host can honestly tell.
             info!(
                 "game: running={} version={:?} protocol={:?} multiplayer={} singleplayer={} server={:?} online={}",
@@ -868,6 +898,9 @@ impl Mod for Hello {
         // declare (which it can). One group per tick: every section doing its work inside one
         // hook callback at once is what trips the hook layer (see AGENTS.md).
         tasks::schedule_after_ticks(14, move || {
+            if !demo(1014) {
+                return;
+            }
             info!(
                 "world: get={:?} by_id={:?} by_name={:?} all={} loaded={:?}",
                 world::get(),
@@ -978,6 +1011,9 @@ impl Mod for Hello {
 
         // Section 16: the blocks a mod declares, and the world it cannot reach.
         tasks::schedule_after_ticks(16, move || {
+            if !demo(16) {
+                return;
+            }
             blocks::register_event_kinds();
             info!(
                 "blocks: register={} events={} known={}",
@@ -1067,6 +1103,9 @@ impl Mod for Hello {
 
         // Section 17: item stacks (real values) and the item registry (the client's).
         tasks::schedule_after_ticks(18, move || {
+            if !demo(17) {
+                return;
+            }
             items::register_event_kinds();
             let mut stack = items::create_stack("minecraft:iron_pickaxe", 1).with_max_count(1);
             stack.set_component(items::ItemComponent::new("minecraft:durability", "250"));
@@ -1160,6 +1199,9 @@ impl Mod for Hello {
 
         // Section 18: an inventory this host owns, and the live one it does not.
         tasks::schedule_after_ticks(20, move || {
+            if !demo(18) {
+                return;
+            }
             inventory::set_local_inventory(Inventory::player());
             info!(
                 "inventory: size={} slots={:?}..{:?} main={:?}..{:?} offhand={:?} armour={:?}..{:?} kinds={:?}",
@@ -1282,6 +1324,9 @@ impl Mod for Hello {
 
         // Section 19: the entity types a mod declares, and the client's entity world.
         tasks::schedule_after_ticks(22, move || {
+            if !demo(19) {
+                return;
+            }
             entities::register_event_kinds();
             info!(
                 "entities: register={} type={:?}",
@@ -1362,6 +1407,9 @@ impl Mod for Hello {
         // Section 20: component and attribute types a mod owns, and an entity's, which it
         // cannot reach.
         tasks::schedule_after_ticks(24, move || {
+            if !demo(1024) {
+                return;
+            }
             info!(
                 "components: register={} schema={:?}",
                 components::register(
@@ -1468,6 +1516,9 @@ impl Mod for Hello {
 
         // Section 21: a player a mod owns, and the local player it cannot reach.
         tasks::schedule_after_ticks(26, move || {
+            if !demo(21) {
+                return;
+            }
             let mut who = PlayerState::new("Tester")
                 .with_uuid("0000-1111-2222")
                 .with_game_mode(GameMode::Creative)
@@ -1581,6 +1632,9 @@ impl Mod for Hello {
 
         // Section 22: effects a mod registers, and damage arithmetic it owns.
         tasks::schedule_after_ticks(28, move || {
+            if !demo(22) {
+                return;
+            }
             effects::register_event_kinds();
             let mut who = PlayerState::new("Tester");
             info!(
@@ -1705,6 +1759,9 @@ impl Mod for Hello {
         // Sections 23 and 24: physics a mod can compute, and a ray against a world it
         // supplies.
         tasks::schedule_after_ticks(30, move || {
+            if !demo(1030) {
+                return;
+            }
             info!(
                 "physics: constants={:?} friction(default)={} friction(ice)={}",
                 physics::constants(),
@@ -1838,6 +1895,9 @@ impl Mod for Hello {
 
         // Section 25: movement a mod can predict for itself, and the input the client owns.
         tasks::schedule_after_ticks(32, move || {
+            if !demo(25) {
+                return;
+            }
             let profile = MovementProfile::new();
             let standing = movement::Input::default();
             let walking = movement::Input {
@@ -1953,6 +2013,9 @@ impl Mod for Hello {
 
         // Section 26: world generation a mod ships, and noise it can run itself.
         tasks::schedule_after_ticks(34, move || {
+            if !demo(26) {
+                return;
+            }
             info!(
                 "worldgen: register_biome={} settings={:?}",
                 worldgen::register_biome(
@@ -2064,6 +2127,9 @@ impl Mod for Hello {
 
         // Section 27: recipes a mod ships, and the matching it can run itself.
         tasks::schedule_after_ticks(36, move || {
+            if !demo(27) {
+                return;
+            }
             info!(
                 "recipes: register_shaped={} recipe={:?}",
                 recipes::register_shaped(recipes::pattern(
@@ -2177,6 +2243,9 @@ impl Mod for Hello {
 
         // Section 28: one registry engine for everything a mod ships.
         tasks::schedule_after_ticks(38, move || {
+            if !demo(28) {
+                return;
+            }
             let gems = registry::register_custom_registry("hello:gems");
             info!(
                 "registry: custom={:?} registries={} register={:?} keyed={:?}",
@@ -2246,6 +2315,9 @@ impl Mod for Hello {
 
         // Section 29: the render lifecycle this host can hook, and the renderer it cannot.
         tasks::schedule_after_ticks(40, move || {
+            if !demo(29) {
+                return;
+            }
             render::register_event_kinds();
             let frames = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
             let counter = std::sync::Arc::clone(&frames);
@@ -2340,6 +2412,9 @@ impl Mod for Hello {
 
         // Section 30: a draw list a mod builds, and the little of it this host can draw.
         tasks::schedule_after_ticks(42, move || {
+            if !demo(30) {
+                return;
+            }
             let mut list = draw::DrawList::new();
             list.set_color([1.0, 0.2, 0.2, 1.0]).set_alpha(0.9);
             list.translate(10.0, 20.0);
@@ -2399,6 +2474,9 @@ impl Mod for Hello {
 
         // Section 31: a GPU ledger a mod keeps, and the device it cannot touch.
         tasks::schedule_after_ticks(44, move || {
+            if !demo(31) {
+                return;
+            }
             let vertex = graphics::create_vertex_buffer("hello:vertices", 4096, "vertex");
             let uniform = graphics::create_uniform_buffer("hello:uniforms", 256, "uniform");
             let texture = graphics::create_texture("hello:atlas", "rgba8", 32, 32);
@@ -2453,6 +2531,9 @@ impl Mod for Hello {
 
         // Section 32: shaders a mod ships, and the pipeline it cannot reach.
         tasks::schedule_after_ticks(46, move || {
+            if !demo(32) {
+                return;
+            }
             shaders::register_include("hello:common", "uniform mat4 u_view;\nuniform float u_time;");
             info!(
                 "shaders: register={} include={}",
@@ -2555,6 +2636,72 @@ impl Mod for Hello {
                 graphics::is_created_on_the_gpu(pipeline),
                 shaders::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
                 shaders::get_material("hello:glow").map(|material| material.shader),
+            );
+        });
+
+        // Section 33: textures and sprites a mod owns, and the upload it cannot do.
+        tasks::schedule_after_ticks(48, move || {
+            if !demo(33) {
+                return;
+            }
+            info!(
+                "textures: load={} format={:?} dimensions={:?} pixels={:?} memory={}",
+                textures::load_from_bytes("hello:square", &[255u8; 64], 4, 4, "rgba8"),
+                textures::get_format("hello:square"),
+                textures::get_dimensions("hello:square"),
+                textures::get_pixels("hello:square").map(|pixels| pixels.len()),
+                textures::get_memory_usage(),
+            );
+            info!(
+                "textures: pixel={:?} set={} now={:?} region={} id={:?}",
+                textures::get_pixel("hello:square", 0, 0),
+                textures::set_pixel("hello:square", 1, 1, [10, 20, 30, 255]),
+                textures::get_pixel("hello:square", 1, 1),
+                textures::update_region("hello:square", 2, 2, 2, 1, &[9, 9, 9, 9, 8, 8, 8, 8]),
+                textures::get_id("hello:square"),
+            );
+            info!(
+                "textures: atlas={} sprite_a={} sprite_b={} sprite_c={}",
+                textures::register_atlas("hello:atlas", 16, 16, "rgba8"),
+                textures::register_sprite("hello:atlas", "hello:a", 8, 8),
+                textures::register_sprite("hello:atlas", "hello:b", 8, 8),
+                textures::register_sprite("hello:atlas", "hello:c", 8, 8),
+            );
+            info!(
+                "textures: sprites={:?} uv_a={:?} uv_c={:?} stitched={} texture={:?}",
+                textures::get_sprites("hello:atlas")
+                    .into_iter()
+                    .map(|sprite| format!("{}@{},{}", sprite.id, sprite.x, sprite.y))
+                    .collect::<Vec<_>>(),
+                textures::get_uv("hello:a"),
+                textures::get_uv("hello:c"),
+                textures::stitch_atlas("hello:atlas"),
+                textures::get("hello:atlas").map(|texture| texture.to_string()),
+            );
+            textures::register_animation("hello:square", &[(0, 100), (1, 200), (2, 100)]);
+            info!(
+                "textures: animation frames={:?} at150={:?} at400={:?} set_frame={}",
+                textures::get("hello:square").map(|texture| texture.frames.len()),
+                textures::frame_at("hello:square", 150),
+                textures::frame_at("hello:square", 400),
+                textures::set_animation_frame("hello:square", 2),
+            );
+            info!(
+                "textures: settings filter={} wrap={} anisotropy={} mipmap={}",
+                textures::set_filter("hello:square", textures::Filter::Linear),
+                textures::set_wrap_mode("hello:square", textures::WrapMode::Repeat),
+                textures::set_anisotropy("hello:square", 4),
+                textures::generate_mipmap("hello:square"),
+            );
+            info!(
+                "textures: client-side: load={} bind={} unbind={} delete={} reload={} refusals={:?} raw={}",
+                textures::load("hello:square"),
+                textures::bind("hello:square"),
+                textures::unbind(),
+                textures::delete("hello:square"),
+                textures::reload("hello:square"),
+                textures::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                textures::is_raw_image("art/thing.png"),
             );
         });
 

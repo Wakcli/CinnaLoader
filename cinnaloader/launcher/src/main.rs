@@ -38,8 +38,22 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             for name in host.names() {
                 println!("  {name}");
             }
-            for _ in 0..125 {
+            // A mod that schedules work for later needs ticks and real time to get there, so
+            // both are a caller's choice: `run <dir> [ticks] [millis per tick]`. Without a
+            // pacing, the ticks run as fast as they can, which is what a short check wants.
+            let ticks: u32 = args
+                .get(2)
+                .and_then(|ticks| ticks.parse().ok())
+                .unwrap_or(125);
+            let pace: u64 = args
+                .get(3)
+                .and_then(|pace| pace.parse().ok())
+                .unwrap_or(0);
+            for _ in 0..ticks {
                 host.tick(16);
+                if pace > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(pace));
+                }
             }
             Ok(ExitCode::SUCCESS)
         }
