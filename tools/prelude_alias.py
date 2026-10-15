@@ -50,9 +50,18 @@ def main() -> int:
         if module is None:
             print(f"cannot tell which module owns the {name} binding on line {line_number}")
             return 1
+        line = lines[line_number - 1]
+        if f"self as {name}" in line:
+            # the module alias is the duplicate: the module is reachable already, drop this one
+            lines[line_number - 1] = line.replace(f"self as {name},", "").replace(
+                f"self as {name}", ""
+            )
+            LIB.write_text("\n".join(lines))
+            print(f"dropped a second `self as {name}`")
+            continue
         alias = f"{module.capitalize()}{name}"
         lines[line_number - 1] = re.sub(
-            rf"(?<![\w:]){name}(?![\w])(?! as)", f"{name} as {alias}", lines[line_number - 1], count=1
+            rf"(?<![\w:]){name}(?![\w])(?! as)", f"{name} as {alias}", line, count=1
         )
         LIB.write_text("\n".join(lines))
         print(f"{module}::{name} -> {alias}")

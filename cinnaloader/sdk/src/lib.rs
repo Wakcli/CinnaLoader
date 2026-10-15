@@ -41,7 +41,7 @@
 use std::{
     ffi::{c_char, CStr, CString},
     ops::RangeInclusive,
-    sync::OnceLock,
+    sync::OnceLock
 };
 
 pub mod breeding;
@@ -286,14 +286,14 @@ pub struct HostApi {
     /// Writes the registry and dependency graph, one `key=value` per line.
     pub graph: Option<unsafe extern "C" fn(out: *mut c_char, capacity: usize) -> i32>,
     /// Runs one command on another mod: 0 enable, 1 disable, 2 is enabled, 3 is loaded.
-    pub mods_command: Option<unsafe extern "C" fn(verb: u32, id: *const c_char) -> i32>,
+    pub mods_command: Option<unsafe extern "C" fn(verb: u32, id: *const c_char) -> i32>
 }
 
 /// A rate the loader's tick can drive: `Timer::every(1000)` fires about once a second.
 #[derive(Debug, Clone, Copy)]
 pub struct Timer {
     remaining: u64,
-    interval: Option<u64>,
+    interval: Option<u64>
 }
 
 impl Default for Timer {
@@ -301,7 +301,7 @@ impl Default for Timer {
     fn default() -> Self {
         Self {
             remaining: u64::MAX,
-            interval: None,
+            interval: None
         }
     }
 }
@@ -312,7 +312,7 @@ impl Timer {
     pub fn after(millis: u64) -> Self {
         Self {
             remaining: millis.max(1),
-            interval: None,
+            interval: None
         }
     }
 
@@ -322,7 +322,7 @@ impl Timer {
         let interval = millis.max(1);
         Self {
             remaining: interval,
-            interval: Some(interval),
+            interval: Some(interval)
         }
     }
 
@@ -342,7 +342,7 @@ impl Timer {
                 self.remaining = u64::MAX;
                 true
             }
-            None => false,
+            None => false
         }
     }
 }
@@ -803,7 +803,7 @@ fn message_level(level: u32) -> &'static str {
     match level {
         level::ERROR => "error",
         level::WARN => "warn",
-        _ => "info",
+        _ => "info"
     }
 }
 
@@ -1165,7 +1165,7 @@ pub fn phase_body<T: Mod>(module: &mut T, code: u32) -> i32 {
             lifecycle::Phase::RenderEnd => module.render_end(),
             lifecycle::Phase::Shutdown => module.shutdown(),
             lifecycle::Phase::Error => return false,
-            _ => return false,
+            _ => return false
         }
         true
     })
@@ -1333,81 +1333,81 @@ macro_rules! export_mod {
         is_enabled, is_reloading, license, loader_version, manifest, manifest_version, metadata,
         name, namespace, permissions, plugin_directory, reported, resource_directory, source_url,
         state,
-        tags, version, website,
+        tags, version, website
     };
     pub use crate::capability::{self as capabilities, Capability};
     pub use crate::compat;
     pub use crate::blocks::{
         self as blocks, BlockBehaviour, BlockDescription, BlockMaterial, BlockProperty,
-        BlockShapes, ToolRequirement,
+        BlockShapes, ToolRequirement
     };
     pub use crate::components::{
         self as components, Attribute, AttributeDefinition, AttributeModifier, AttributeSet,
-        ComponentData, ComponentField, ComponentSet, ComponentType, ComponentValue, ModifierKind,
+        ComponentData, ComponentField, ComponentSet, ComponentType, ComponentValue, ModifierKind
     };
     pub use crate::config::{
         self as config, ConfigCategory, ConfigComment, ConfigConstraint, ConfigEntry, ConfigGroup,
         ConfigMigration, ConfigRestartRequirement, ConfigSchema, ConfigType, ConfigValidator,
-        ConfigValue, ConfigVisibility, Transaction,
+        ConfigValue, ConfigVisibility, Transaction
     };
     pub use crate::deps::{
         CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
         LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
-        ResolutionErrorKind, SoftDependency, VersionedDependency,
+        ResolutionErrorKind, SoftDependency, VersionedDependency
     };
     pub use crate::channels::{
         self as channels, Channel, ChannelError, ChannelStatus, DEFAULT_PAYLOAD_LIMIT,
-        Message as ChannelMessage, Peer, Request as ChannelRequest, Stream, StreamId,
+        Message as ChannelMessage, Peer, Request as ChannelRequest, Stream, StreamId
     };
     pub use crate::chat::{
         self as chat, ClickAction, ClickEvent, Content, HoverAction, HoverEvent, Message,
-        MessageHistory, Span, Style, TextColor,
+        MessageHistory, Span, Style, TextColor
     };
     pub use crate::commands::{
         self as commands, Argument, ArgumentType, ArgumentValue, Command, CommandCall,
-        CommandError, CommandOrigin, CommandResult, CommandSource, ParsedCommand, TreeNode,
+        CommandError, CommandOrigin, CommandResult, CommandSource, ParsedCommand, TreeNode
     };
     pub use crate::trading::{self as trading, TradeOffer, TradeRefusal, TradeReceipt, VillagerHandle};
     pub use crate::breeding::{self as breeding, Animal, BreedingPair, BreedingRule, Offspring};
     pub use crate::farming::{self as farming, Crop, GrowthRule, Planting};
     pub use crate::structures::{
         self as structures, Bounds, Declaration, DeclarationKind, Direction as StructureDirection,
-        Jigsaw, Mirror, Placed, Placement, Rotation, Structure, Template,
+        Jigsaw, Mirror, Placed, Placement, Rotation, Structure, Template
     };
     pub use crate::block_entities::{self as block_entities, BlockEntity, BlockEntityType};
     pub use crate::serialization::{
         self as serialization, Error as SerializeError, Field, Kind, Map, Migration, Schema,
-        Serializer, Value,
+        Serializer, Value
 };
 pub use crate::data::{
         self as data, Codec as DataCodec, ComponentMap, ComponentType as DataComponentType, DataError,
         DataMigration, DataType,
-        Patch, ValueKind,
+        Patch, ValueKind
     };
     pub use crate::persistence::{
-    self as persistence, DataScope, PersistError, SavedData, Store, StoreId, StoreMigration,
+    self as persistence, DataScope, PersistError, SavedData, Store, StoreId, StoreMigration
 };
 pub use crate::packs::{
         self as packs, MergeEntry, MergedFile, Pack, PackKind, PackManifest, PackMetadata,
-        PackOverride,
+        PackOverride
     };
 pub use crate::content::{self as content, ContentKind};
 pub use crate::game_rules::{
-        self as game_rules, GameRule, RuleChange, RuleError, BUILT_IN_TYPES, EVENT_CHANGED,
+        self as game_rules, GameRule, RuleChange, RuleError, BUILT_IN_TYPES, EVENT_CHANGED
     };
 pub use crate::gameplay::{
-        self as gameplay, Hook, Phase as HookPhase, RuleProfile, FAMILIES,
+        self as gameplay, Hook, Phase as HookPhase, RuleProfile, FAMILIES
     };
 // §61 — manager wires this into sdk/src/lib.rs prelude. `pub mod query;` is already present.
     // §61 — `Filter` and `Record` already exist in this crate's prelude (textures::Filter,
     // §61 — log::Record), so they are aliased. Query the prelude as `query::*` or by alias.
 pub use crate::query::{
-    self as query, Filter as QueryFilter, Index, Query, QueryError, Record as QueryRecord, Sort,
+    self as query, Filter as QueryFilter, Index, Query, QueryError, Record as QueryRecord, Sort
 };
 pub use crate::math::{
         self as math, Aabb, Capsule, Color as MathColor, Easing, EulerAngles, Frustum as MathFrustum, IVec2, IVec3, Mat4 as MathMat4,
         Matrix3, Matrix4, Obb, Plane as MathPlane, Pose, Quaternion, Ray as MathRay, RayHit as MathRayHit, Rect, Rgba, Rgba8, Size,
-        Sphere, Transform as MathTransform, Triangle, Vec2, Vec3 as MathVec3, Vec4,
+        Sphere, Transform as MathTransform, Triangle, Vec2, Vec3 as MathVec3, Vec4
     };
 // §63 — manager wires these into the sdk/src/lib.rs prelude. `pub mod time;` is already there.
     // §63 — do NOT `pub use crate::time::Timer`: a bare `Timer` already exists in this crate's
@@ -1417,37 +1417,37 @@ pub use crate::environment::{
         self as environment, ActiveEffect, BiomeClimate, ClimateCategory, EffectKind, EffectSet,
         EnvironmentClock, EnvironmentEffect, EnvironmentPiece, LightKind, LightModel, LightSource,
         PieceKind, Precipitation, WeatherMachine, WeatherState, WeatherType, MAX_LIGHT,
-        MAX_SKY_DARKEN, RAMP_TICKS, SNOW_TEMPERATURE, TICKS_PER_DAY,
+        MAX_SKY_DARKEN, RAMP_TICKS, SNOW_TEMPERATURE, TICKS_PER_DAY
     };
     pub use crate::settings::{
-        self as settings, Profile, Setting, SettingChange, SettingError, SettingSchema,
+        self as settings, Profile, Setting, SettingChange, SettingError, SettingSchema
     };
     pub use crate::window::{self as window, Monitor, CLOSE_REQUESTED};
     pub use crate::platform::{
     self as platform, AccessibilitySettings, CpuInfo, DisplayInfo, GpuInfo, MemoryInfo,
-    PlatformCapability, PlatformPaths,
+    PlatformCapability, PlatformPaths
 };
 // §67 — manager wires these into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §67 — `Kind` already names serialization::Kind in the prelude, so metrics::Kind is aliased.
 pub use crate::metrics::{self as metrics, Kind as MetricKind, Metric, Stats};
     pub use crate::profiler::{self as profiler, Section, FRAME_WINDOW};
 pub use crate::debug::{
-        self as debug, Flag, InvariantResult, Readout, Trace, TraceRecord, WatchStats,
+        self as debug, Flag, InvariantResult, Readout, Trace, TraceRecord, WatchStats
     };
 // §70 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §70 — `pub mod testing;` is already declared. Export the module alias and its types; its
     // §70 — free functions are reached as `testing::…` (a bare `run`/`run_all` would collide).
 pub use crate::testing::{
     self as testing, MockConnection, MockEntity, MockInventory, MockPlayer, MockWorld, Outcome,
-    Recorder, Report, TestCase, TestOutcome,
+    Recorder, Report, TestCase, TestOutcome
 };
     pub use crate::memory::{
         self as memory, AllocError, Arena, ArenaInfo, HeapInfo, Leak, OwnerBytes, OwnerDelta,
-        Pool as MemoryPool, PoolError, PoolStats, PressureEvent, ResourceStats, Slab, SlabInfo,
+        Pool as MemoryPool, PoolError, PoolStats, PressureEvent, ResourceStats, Slab, SlabInfo
     };
     pub use crate::dev::{
     self as dev, BlockedReload, Fingerprint, PlannedReload, QueueState, ReloadKind, ReloadPlan,
-    ReloadRequest,
+    ReloadRequest
 };
 // §72 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §72 — `pub mod scripting;` is already declared. Export the module alias and its types; its
@@ -1460,7 +1460,7 @@ pub use crate::scripting::{self as scripting, RuntimeStats, ScriptError, Value a
 pub use crate::interop::{
     self as interop, ApiConsumer, ApiError, ApiProvider, CompatibilityAdapter,
     CompatibilityStatus, Extension, ExtensionPoint, MethodSpec, ModApi, ModBridge, ReturnKind,
-    Service, SharedDataStore,
+    Service, SharedDataStore
 };
 // §74 — manager wires these into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §74 — `pub mod reflection;` and `pub mod accessors;` are already declared (lines 74-75).
@@ -1468,10 +1468,10 @@ pub use crate::interop::{
 pub use crate::reflection::{
     self as reflection, AccessKind, Adapter, FieldAccessor, FieldDescriptor, FieldMetadata,
     Invoker, MethodDescriptor, MethodMetadata, ReflectError, ReflectValue, Symbol, TypeDescriptor,
-    TypeMetadata,
+    TypeMetadata
 };
     pub use crate::accessors::{
-    self as accessors, AccessError, AccessForm, Accessor, Method, ValueStore,
+    self as accessors, AccessError, AccessForm, Accessor, Method, ValueStore
 };
 // §75 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §75 — `pub mod patches;` is already declared (line 76) and s75 is already wired in
@@ -1479,24 +1479,24 @@ pub use crate::reflection::{
     // §75 — `Patch` already names data::Patch in the prelude, so patches::Patch is aliased.
 pub use crate::patches::{
     self as patches, AppliedPatch, ChainStep, Conflict, InjectionPoint, Patch as CodePatch,
-    PatchError, PatchStatus, Pattern, Rename, TransformationReport, Transformer,
+    PatchError, PatchStatus, Pattern, Rename, TransformationReport, Transformer
 };
 // §76 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §76 — `pub mod datadriven;` is already declared. No type-name collisions: none of
     // §76 — Document/DocumentSchema/SchemaField/Validation/Reference/DocumentError is in the prelude.
     // §76 — the 15 wishlist names are reached as `datadriven::load`, `datadriven::reload`, etc.
 pub use crate::datadriven::{
-    self as datadriven, Document, DocumentError, DocumentSchema, Reference, SchemaField, Validation,
+    self as datadriven, Document, DocumentError, DocumentSchema, Reference, SchemaField, Validation
 };
 // §77 — manager wires these into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §77 — `pub mod custom_entities;` and `pub mod projectiles;` are already declared (lines 78-79).
     // §77 — no name here collides with the existing prelude, so no aliases.
 pub use crate::custom_entities::{
-    self as custom_entities, EntityDefinition, EntityInstance, Hitbox, ModelRef,
+    self as custom_entities, EntityDefinition, EntityInstance, Hitbox, ModelRef
 };
     pub use crate::projectiles::{
     self as projectiles, CollisionBehavior, HitTarget, Impact, ImpactBehavior, Projectile,
-    ProjectileType,
+    ProjectileType
 };
 // §78 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §78 — `pub mod builders;` is already declared (sdk/src/lib.rs:80) and s78 is already
@@ -1505,7 +1505,7 @@ pub use crate::custom_entities::{
     // §78 — module's error is exported as `BuilderError` to keep one name per concept.
 pub use crate::builders::{
     self as builders, BlockBuilder, BuildError as BuilderError, BuildErrorKind, EntityBuilder,
-    ItemBuilder,
+    ItemBuilder
 };
 // §79 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §79 — `pub mod builders_ui;` is already declared (sdk/src/lib.rs:81) and s79 is already
@@ -1516,7 +1516,7 @@ pub use crate::builders::{
     // §79 — `builders_ui::get_handlers`, `builders_ui::clear_handlers` via the module alias.
 pub use crate::builders_ui::{
     self as builders_ui, BuildError, ScreenBuilder, DEFAULT_SIZE, DEFAULT_THEME, MAX_SIZE,
-    MIN_SIZE,
+    MIN_SIZE
 };
 // §80 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §80 — `Kind` and `Migration` are already taken by serialization in the prelude, so `Kind`
@@ -1526,7 +1526,7 @@ pub use crate::builders_ui::{
     // §80 — the 22 wishlist names are reached as `migration::run`, `migration::register_config_migration`, etc.
 pub use crate::migration::{
     self as migration, Action, Change as MigrationChange, Error as MigrationError, Kind as MigrationKind, Run, Status,
-    Step, Support,
+    Step, Support
 };
 // §81 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §81 — `pub mod errors;` is already declared (lib.rs:83). The 19 wishlist names are reached
@@ -1535,10 +1535,10 @@ pub use crate::migration::{
     // §81 — (lib.rs:1527). Do NOT re-export `errors::RetryPolicy` unaliased; alias it.
     // §81 — A bare `Error` is avoided too (serialization::Error is already `SerializeError`).
     pub use crate::errors::{
-        self as errors, Backoff, Cause, ErrorReport, Recovery, RecoveryStatus, RecoveryStrategy,
+        self as errors, Backoff, Cause, ErrorReport, Recovery, RecoveryStatus, RecoveryStrategy
     };
 pub use crate::crash::{
-        self as crash, Crash, Group, Report as CrashReport, Snapshot,
+        self as crash, Crash, Group, Report as CrashReport, Snapshot
     };
 // §83 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §83 — `pub mod installer;` is already declared (lib.rs:85) and s83 is already dispatched from
@@ -1549,11 +1549,11 @@ pub use crate::crash::{
 pub use crate::installer::{
     self as installer, Fingerprint as PackageFingerprint, InstallError, InstallPlan,
     InstallationStatus, Installed, Journal, JournalStep, Manifest as InstallManifest, PackageInfo,
-    PlanAction, PlanEntry, Repository, StepOutcome,
+    PlanAction, PlanEntry, Repository, StepOutcome
 };
 pub use crate::packages::{
         self as packages, FileEntry, Header, Inspect, Manifest, Package, PackageError,
-        SecurityReport, SignatureCheck,
+        SecurityReport, SignatureCheck
     };
 // §85 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §85 — `pub mod loader;` is already declared (sdk/src/lib.rs:87); the module was a placeholder.
@@ -1566,7 +1566,7 @@ pub use crate::packages::{
 pub use crate::loader::{
     self as loader, ConfigError, FieldKind, GlobalService, Loader, LoaderConfig, LoaderPaths,
     LoaderState, LoaderStateMachine, LogLevel, PhaseReport, PhaseTiming, ServiceError,
-    ServiceRequirement, TransitionError,
+    ServiceRequirement, TransitionError
 };
 // §86 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §86 — `pub mod safe_mode;` is already declared (lib.rs:88) and s86 is already dispatched from
@@ -1574,7 +1574,7 @@ pub use crate::loader::{
     // §86 — no name here collides with the existing prelude; the types are safe to bring in bare.
 pub use crate::safe_mode::{
     self as safe_mode, CrashRecord, DisabledMod, RecoveryReport, RecoveryStep, StartMode,
-    DEFAULT_THRESHOLD, DEFAULT_WINDOW_MILLIS, STORE,
+    DEFAULT_THRESHOLD, DEFAULT_WINDOW_MILLIS, STORE
 };
 // §87 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §87 — `pub mod features;` is already declared (lib.rs:89) and s87 is already dispatched from
@@ -1583,7 +1583,7 @@ pub use crate::safe_mode::{
     // §87 — module's richer availability enum stays reachable as `features::FeatureAvailability`.
 pub use crate::features::{
     self as features, Acknowledgement, Feature, FeatureError, FeatureReport, FeatureStage,
-    FeatureWarning,
+    FeatureWarning
 };
 // §88 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
     // §88 — `pub mod tools;` is already declared (sdk/src/lib.rs:90) and s88 is already dispatched
@@ -1594,204 +1594,232 @@ pub use crate::features::{
     // §88 — the 27 wishlist names are reached as `tools::register`, `tools::export_project`, …
 pub use crate::tools::{
     self as tools, BuildReport, Change as ToolChange, Diff, Document as ToolDocument, EditorContext,
-    Error as ToolsError, Item, Problem, Project, Report as ToolReport, Tool, ToolKind,
+    Error as ToolsError, Item, Problem, Project, Report as ToolReport, Tool, ToolKind
 };
     pub use crate::editor::{
         self as editor, Build, Error as EditorError, Node, NodeKind, Project as EditorProject,
-        Report as EditorReport, Selection, Status as EditorStatus,
+        Report as EditorReport, Selection, Status as EditorStatus
     };
     pub use crate::docs::{
-        self as docs, DocKind, Entry as DocEntry, Hit, Param, Rank,
+        self as docs, DocKind, Entry as DocEntry, Hit, Param, Rank
     };
     pub use crate::api::{
         self as api, Change as ApiChange, ChangeKind as ApiChangeKind, Diff as ApiDiff, ApiItem,
-        ApiKind, Support as ApiSupport, Stability,
+        ApiKind, Support as ApiSupport, Stability
     };
     pub use crate::network_debug::{
         self as network_debug, Bucket, Capture, Diff as NetworkDiff, Filter as NetworkFilter,
-        Record as NetworkRecord, ReplayReport, SizeStats, Statistics as NetworkDebugStatistics,
+        Record as NetworkRecord, ReplayReport, SizeStats, Statistics as NetworkDebugStatistics
     };
     pub use crate::server::{
         self as server, Ban, JoinRefused, Kick, Player, PlayerData, Server, ServerProperties,
         ServerState, Session, Transition as ServerTransition, TransitionRefused, World,
-        WorldData,
+        WorldData
     };
     pub use crate::server_permissions::{
-        self as server_permissions, Decision, Error as PermissionError, Node as Server_permissionsNode, Role, User,
+        self as server_permissions, Decision, Error as PermissionError, Node as Server_permissionsNode, Role, User
     };
     pub use crate::accessibility::{
         self as accessibility, AccessibilitySettings as A11ySettings, AccessOption,
-        AccessibleWidget, Caption, ColorPalette, OptionChange, OptionError,
+        AccessibleWidget, Caption, ColorPalette, OptionChange, OptionError
+    };
+    pub use crate::notifications::{
+        self as notifications, Level as NotificationLevel, Position, Action as NotificationsAction, Notification,
+        Push, NotificationQueue, History, Preferences
+    };
+    pub use crate::updates::{
+        self as updates, UpdateKind, Channel as UpdatesChannel, Policy,
+        Decision as UpdatesDecision, Throttle, Manifest as UpdatesManifest, Release, Provider,
+        Status as UpdatesStatus, HistoryEntry, Plan, Verification, Entry, Changelog,
+        Compatibility, UpdateInfo, CheckReport, Error
+    };
+    pub use crate::security::{
+        self as security, TrustState, Decision as SecurityDecision, IntegrityEntry,
+        IntegrityManifest, MismatchKind, Mismatch, IntegrityReport, SignedManifest,
+        SignatureOutcome, Failure, TamperReport, AuditEntry
+    };
+    pub use crate::snapshots::{
+        self as snapshots, SnapshotError, Snapshot as SnapshotsSnapshot, SnapshotMetadata,
+        DiffEntry, Diff as SnapshotsDiff, Comparison
+    };
+    pub use crate::build::{
+        self as build, Mode, PanicStrategy, Profile as BuildProfile, Target,
+        Compatibility as BuildCompatibility, BuildConfig, Invocation, BuildPlan, Artifact,
+        Outcome as BuildOutcome, StepRun, BuildLog, IncrementalStatus, Status as BuildStatus,
+        Progress, BuildError as BuildBuildError
+    };
+    pub use crate::telemetry::{
+        self as telemetry, Consent, Event, Configuration, Preview, Aggregate
     };
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
-        State as DrawState, Transform,
+        State as DrawState, Transform
     };
     pub use crate::effects::{
         self as effects, damage, DamageInstance, DamageModifier, DamageModifierKind,
-        DamageSource, DamageType, EffectCategory, EffectType,
+        DamageSource, DamageType, EffectCategory, EffectType
     };
     pub use crate::entities::{
-        self as entities, EntityComponent, EntitySize, EntityType,
+        self as entities, EntityComponent, EntitySize, EntityType
     };
     pub use crate::enchantments::{
-        self as enchantments, Compatibility, EnchantModifierTarget, Enchantment,
-        EnchantmentInstance, EnchantmentModifier, Rarity,
+        self as enchantments, Compatibility as EnchantmentsCompatibility, EnchantModifierTarget, Enchantment,
+        EnchantmentInstance, EnchantmentModifier, Rarity
     };
     pub use crate::equipment::{
-        self as equipment, AttributeGrant, Equipment, EquipmentSlot, GearType,
+        self as equipment, AttributeGrant, Equipment, EquipmentSlot, GearType
     };
     pub use crate::loot::{
-        self as loot, Condition, ConditionKind, Entry, Function, FunctionKind, LootContext,
-        LootModifier, LootModifierKind, LootRandom, NumberProvider, Pool, Table, TableKind,
+        self as loot, Condition, ConditionKind, Entry as LootEntry, Function, FunctionKind, LootContext,
+        LootModifier, LootModifierKind, LootRandom, NumberProvider, Pool, Table, TableKind
     };
     pub use crate::scoreboard::{
         self as scoreboard, CollisionRule, DisplaySlot, Objective, RenderType, Scoreboard, Team,
-        Visibility,
+        Visibility
     };
     pub use crate::statistics::{
-        self as statistics, Statistic, StatisticCategory, Statistics as StatStore,
+        self as statistics, Statistic, StatisticCategory, Statistics as StatStore
     };
     pub use crate::events::{
-        self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,
+        self as events, DispatchPhase, Event as EventsEvent, ListenerInfo, Payload, Priority, kind
     };
     pub use crate::fs::{self as fs, File, FsError, Metadata as FileMetadata, Watch};
     pub use crate::game::{self as game, Request, RequestOutcome, SessionInfo, Window};
     pub use crate::graphics::{
         self as graphics, Ledger, ResourceDesc, ResourceHandle, ResourceKind as GpuResourceKind,
-        BACKENDS,
+        BACKENDS
     };
     pub use crate::hud::{
-        self as hud, Alignment, Anchor, HudElement, HudLayer, KNOWN_ELEMENTS,
+        self as hud, Alignment, Anchor, HudElement, HudLayer, KNOWN_ELEMENTS
     };
     pub use crate::i18n::{self as i18n, Language, NumberStyle};
     pub use crate::input::{
-        self as input, Button as InputButton, Device as InputDevice, InputState, Keybind,
+        self as input, Button as InputButton, Device as InputDevice, InputState, Keybind
     };
     pub use crate::inventory::{
         self as inventory, ContainerType, Inventory, InventoryError, SlotKind,
         HOTBAR_FIRST, HOTBAR_LAST, MAIN_FIRST, MAIN_LAST, OFFHAND, ARMOUR_FIRST, ARMOUR_LAST,
-        PLAYER_SLOTS,
+        PLAYER_SLOTS
     };
     pub use crate::items::{self as items, Component as ItemComponent, ItemStack, ItemType};
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};
     pub use crate::mods;
     pub use crate::physics::{
-        self as physics, bounding_box, Body, Ray, RayHit, GRAVITY, TERMINAL_VELOCITY,
+        self as physics, bounding_box, Body, Ray, RayHit, GRAVITY, TERMINAL_VELOCITY
     };
     pub use crate::network::{
         self as network, Address, Codec as NetCodec, ConnId, Connection, ConnectionState,
-        ListenerId, NetError, RetryPolicy, Statistics as NetStatistics, Transport,
+        ListenerId, NetError, RetryPolicy, Statistics as NetStatistics, Transport
     };
     pub use crate::packets::{
-        self as packets, Buffer, Codec, Direction, Packet, PacketError, PacketState, TraceEntry,
+        self as packets, Buffer, Codec, Direction, Packet, PacketError, PacketState, TraceEntry
     };
     pub use crate::particles::{
-        self as particles, EmissionShape, Emitter, Particle, ParticleType, VisualEffect,
+        self as particles, EmissionShape, Emitter, Particle, ParticleType, VisualEffect
     };
     pub use crate::player::{
-        self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics,
+        self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics
     };
     pub use crate::ai::{
         self as ai, Behaviour, Candidate, Goal, GoalSelection, MemoryType, MobTarget, NavStep,
-        Navigator, Path, Schedule, Sensor, StateMachine, StuckDetector, TargetFilter, Transition,
+        Navigator, Path, Schedule, Sensor, StateMachine, StuckDetector, TargetFilter, Transition
     };
     pub use crate::fluids::{
         self as fluids, FlowReport, Fluid, FluidBehaviour, FluidCell, FluidGrid, FluidInteraction,
-        InteractionRule,
+        InteractionRule
     };
     pub use crate::redstone::{
         self as redstone, ComparatorBehavior, ComparatorMode, Component as SignalComponent,
         Signal, SignalConsumer, SignalGraph, SignalKind, SignalModifier, SignalNetwork,
-        SignalNode, SignalSource, WireBehavior,
+        SignalNode, SignalSource, WireBehavior
     };
     pub use crate::audio::{
         self as audio, Attenuation, Bus, BusHandle, Listener, PlaybackHandle, PlaybackState,
-        Sound, SoundCategory, SoundPlayback, Source, SourceHandle,
+        Sound, SoundCategory, SoundPlayback, Source, SourceHandle
     };
     pub use crate::camera::{
         self as camera, Camera, CameraMode, Frustum, Mat4, Plane, DEFAULT_FAR, DEFAULT_FOV,
-        DEFAULT_NEAR, MAX_FOV, MIN_FOV,
+        DEFAULT_NEAR, MAX_FOV, MIN_FOV
     };
     pub use crate::models::{
         self as models, Animation, AnimationController, Bone, BoneTransform, Keyframe, LoopMode,
-        Model, ModelPart, Playback, Vec3,
+        Model, ModelPart, Playback, Vec3
     };
     pub use crate::movement::{
-        self as movement, Input, MovementMode, MovementProfile, MovementStep,
+        self as movement, Input, MovementMode, MovementProfile, MovementStep
     };
     pub use crate::permissions::{
-        self as permissions, AuditEntry, AuditKind, Grant, TrustLevel,
+        self as permissions, AuditKind, Grant, TrustLevel
     };
     pub use crate::raycast::{
         self as raycast, from_camera, from_entity as raycast_from_entity, from_position,
-        from_body, EntityBox, RaycastQuery, RaycastResult, Target,
-        CAMERA_REACH, REACH_CREATIVE, REACH_SURVIVAL,
+        from_body, EntityBox, RaycastQuery, RaycastResult,
+        CAMERA_REACH, REACH_CREATIVE, REACH_SURVIVAL
     };
     pub use crate::recipes::{
         self as recipes, from, pattern, shaped, shapeless, Ingredient, IngredientStack, Recipe,
-        RecipeType,
+        RecipeType
     };
     pub use crate::registry::{
         self as registry, Change, ChangeKind, Registry, RegistryError, RegistryHandle,
-        RegistrySnapshot, CLIENT_REGISTRIES, DEFAULT as DEFAULT_REGISTRY,
+        RegistrySnapshot, CLIENT_REGISTRIES, DEFAULT as DEFAULT_REGISTRY
     };
     pub use crate::render::{self as render, Renderer};
     pub use crate::resources::{
-        self as resources, Provider, ResourceDependency, ResourceId,
+        self as resources, ResourceDependency, ResourceId,
         ResourceKind as ResourceMediaKind,
         ResourceLocation, ResourceManager, ResourceMetadata, ResourceOverride, ResourcePack,
-        ResourceReloadListener, ResourceStack,
+        ResourceReloadListener, ResourceStack
     };
     pub use crate::textures::{
         self as textures, AnimationFrame, Atlas, Filter, Sprite, Texture, TextureFormat,
-        WrapMode,
+        WrapMode
     };
     pub use crate::ui::{
-        self as ui, Layout, Screen, UiState, Widget, WidgetKind,
+        self as ui, Layout, Screen, UiState, Widget, WidgetKind
     };
     pub use crate::widget::{
         self as widget, Constraints, Dispatch, Edges, Rect as WidgetRect, WidgetEvent,
-        WidgetNode, WidgetType,
+        WidgetNode, WidgetType
     };
     pub use crate::world::{
         self as world, dimensions, AmbientProperties, DimensionDescription, DimensionKind,
-        Refusal, RespawnRules, WorldInfo,
+        Refusal, RespawnRules, WorldInfo
     };
     pub use crate::worldgen::{
         self as worldgen, Biome, Chunk, GenerationContext, GenerationPiece, Noise, PieceKind as WorldgenPieceKind,
-        Random,
+        Random
     };
     pub use crate::shaders::{
-        self as shaders, Material, PostProcess, Shader, ShaderHook, ShaderStage, ShaderVariable,
+        self as shaders, Material, PostProcess, Shader, ShaderHook, ShaderStage, ShaderVariable
     };
     pub use crate::storage::{
-        self as storage, Format, Namespace, Storage, StoreError, StoreTransaction,
+        self as storage, Format, Namespace, Storage, StoreError, StoreTransaction
     };
     pub use crate::tasks::{
         self as tasks, AsyncResult, CancellationToken, JobGroup, JobQueue, MainThreadExecutor,
         NetworkExecutor, RenderThreadExecutor, TaskExecutor, TaskHandle, TaskMetrics, TaskPriority,
-        TaskResult, TaskStatus, ThreadAffinity, WorkerPool,
+        TaskResult, TaskStatus, ThreadAffinity, WorkerPool
     };
     pub use crate::lifecycle::{
         cancel_pending_hooks, current_phase, defer_until_ready, is_initialized, is_ready,
-        previous_version, register_cleanup, register_shutdown_handler, Phase,
+        previous_version, register_cleanup, register_shutdown_handler, Phase
     };
     pub use crate::modinfo::{
         BuildInfo, Environment, ModContext, ModDirectory, ModInfo, ModInstance,
-        ModManifest, ModMetadata, ModNamespace, ModVersion, Permission, State,
+        ModManifest, ModMetadata, ModNamespace, ModVersion, Permission, State
     };
     pub use crate::version::{
         ApiStability, CompatibilityReport, CompatibilityRule, DeprecationInfo, FeatureAvailability,
         FeatureFlag, Version, VersionConstraint, VersionMapping, VersionPredicate, VersionRange,
-        VersionReq,
+        VersionReq
     };
     pub use crate::{
         button, choice, choice_index, config_value, enabled, error, export_mod, feature,
         hosted_api_version, info, key,
         keybind, meta, mods_dir, number, overlay_line, set_config, set_enabled, set_number,
-        slider, toggle_gui, warn, Mod, Timer, OFF, ON,
+        slider, toggle_gui, warn, Mod, Timer, OFF, ON
     };
 }
 
@@ -1878,7 +1906,7 @@ mod tests {
             declare: None,
             report: None,
             graph: None,
-            mods_command: None,
+            mods_command: None
         }
     }
 
@@ -1951,7 +1979,7 @@ mod tests {
     struct Recorder {
         seen: Vec<&'static str>,
         errors: Vec<String>,
-        boom: bool,
+        boom: bool
     }
 
     impl Mod for Recorder {

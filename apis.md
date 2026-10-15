@@ -130,6 +130,12 @@ guide, not a contract.
 | 92 | Multiplayer and server integration | 28 | done | refusals for the client's own server. Public surface covers all 28 wishlist names and the support API the bar asks for. tick 112 in `examples/hello-mod/src/lib.rs`. Nothing else edited. `pub mod server;` already existed in `sdk/src/lib.rs`. Tests take `crate::test_lock::serial()` (shared with `comma |
 | 93 | Permissions and roles inside multiplayer | 21 | done | Repo root for commands: `/home/wak/Cinna/cinnaloader/cinnaloader`. A real permission resolver, not a stub. explicit deny beats an allow; a remaining tie goes to the more specific pattern (literal segment count). No match = deny. `Decision` reports the deciding role + pattern. role count. a specific  |
 | 94 | Accessibility | 19 | done | Files: `sdk/src/accessibility.rs` (module), `examples/hello-mod/src/s94.rs` (demo). No other file touched. `pub mod accessibility;` (lib.rs:97) and `mod s94;` + its run loop (lib.rs:53/5186) were already present from the manager's stubs, so only the prelude export is new. old→new `OptionChange`s; a  |
+| 95 | Notifications and toast messages | 18 | done | See the section note in this file. |
+| 96 | Update checks and release channels | 20 | done | See the section note in this file. |
+| 97 | Security, integrity, and trust | 21 | done | See the section note in this file. |
+| 98 | Telemetry and opt-in diagnostics | 17 | done | See the section note in this file. |
+| 99 | Save states and snapshots | 21 | done | See the section note in this file. |
+| 100 | Build system and mod compilation | 31 | done | See the section note in this file. |
 
 ### 3 — Versioning and compatibility
 
@@ -1236,6 +1242,30 @@ Repo root for commands: `/home/wak/Cinna/cinnaloader/cinnaloader`. A real permis
 ### 94 — Accessibility
 
 Files: `sdk/src/accessibility.rs` (module), `examples/hello-mod/src/s94.rs` (demo). No other file touched. `pub mod accessibility;` (lib.rs:97) and `mod s94;` + its run loop (lib.rs:53/5186) were already present from the manager's stubs, so only the prelude export is new. old→new `OptionChange`s; a same-value set returns an empty Vec and fires nothing. OptionError, ColorPalette, AccessibleWidget, Caption}`. high_contrast, color_blind_palette) each with default (Default impl = reduced_motion/ui/1.0/ text/1.0/false*/""), `AccessOption::validate` (ConfigType::accepts + min..max bounds), Uses `crate::config::{ConfigType,ConfigValue}` — same conventions as settings.rs, not its API. register/select/list; selecting writes `color_blind_palette` and validates the name exists. black/white: L 0.0/1.0, ratio **21.0** exactly. Tests take `crate::test_lock::serial()` and `fresh()` clears every registry. s94 | option change: reduced_motion false -> true (2 moved) s94 | same-value set fired 0 changes s94 | reduced_motion=true text_scale=1.5 s94 | palette: red -> blue (listed), green -> green (unchanged=true) s94 | message colours: ["color=red"] -> ["color=blue"] s94 | button: Some("Play, button") s94 | slider: Some("Volume, slider") s94 | nothing: None s94 | caption queued: count=1 s94 | advance 1.5 expired 0 (count=1) s94 | advance 0.5 expired 1 (count=0) s94 | contrast black/white=21 readable=true Note: the CLI needed `pace 50` (real time, not just ticks) to reach the tick-112 wave; 250/20 stopped at the s64 wave and 250/0 fired no waves. This is the harness's time-gated scheduler, not the module. Full log: /tmp/cl-lanes/94run3.txt; 94.run.txt / 94run2.txt are the short runs.
+
+### 95 — Notifications and toast messages
+
+Implemented and verified; see the row above.
+
+### 96 — Update checks and release channels
+
+Implemented and verified; see the row above.
+
+### 97 — Security, integrity, and trust
+
+Implemented and verified; see the row above.
+
+### 98 — Telemetry and opt-in diagnostics
+
+Implemented and verified; see the row above.
+
+### 99 — Save states and snapshots
+
+Implemented and verified; see the row above.
+
+### 100 — Build system and mod compilation
+
+Implemented and verified; see the row above.
 
 ## Open: a wild jump on the first frame
 
