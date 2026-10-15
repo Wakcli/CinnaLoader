@@ -38,6 +38,13 @@ mod s80;
 mod s81;
 mod s82;
 
+mod s83;
+mod s84;
+mod s85;
+mod s86;
+mod s87;
+mod s88;
+
 use cinnaloader::prelude::*;
 
 /// Whether a section's demonstration should run: every one of them when nothing is set, or
@@ -5129,6 +5136,27 @@ impl Mod for Hello {
             }
             for line in s82::run() {
                 info!("s82 | {line}");
+            }
+        });
+
+        tasks::schedule_after_ticks(110, move || {
+            for line in s83::run() {
+                info!("s83 | {line}");
+            }
+            for line in s84::run() {
+                info!("s84 | {line}");
+            }
+            for line in s85::run() {
+                info!("s85 | {line}");
+            }
+            for line in s86::run() {
+                info!("s86 | {line}");
+            }
+            for line in s87::run() {
+                info!("s87 | {line}");
+            }
+            for line in s88::run() {
+                info!("s88 | {line}");
             }
         });
 
