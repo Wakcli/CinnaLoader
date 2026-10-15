@@ -1278,7 +1278,7 @@ macro_rules! export_mod {
 }
 
 /// Everything a mod needs: `use cinnaloader::prelude::*;`
-pub mod prelude {
+        pub mod prelude {
     pub use crate::metadata::{
         authors, build_number, build_timestamp, cache_directory, category,
         declared_capabilities,
@@ -1325,14 +1325,14 @@ pub mod prelude {
     pub use crate::trading::{self as trading, TradeOffer, TradeRefusal, TradeReceipt, VillagerHandle};
     pub use crate::breeding::{self as breeding, Animal, BreedingPair, BreedingRule, Offspring};
     pub use crate::farming::{self as farming, Crop, GrowthRule, Planting};
-pub use crate::structures::{
+    pub use crate::structures::{
         self as structures, Bounds, Declaration, DeclarationKind, Direction as StructureDirection,
         Jigsaw, Mirror, Placed, Placement, Rotation, Structure, Template,
     };
-pub use crate::block_entities::{self as block_entities, BlockEntity, BlockEntityType};
+    pub use crate::block_entities::{self as block_entities, BlockEntity, BlockEntityType};
     pub use crate::serialization::{
-    self as serialization, Error as SerializeError, Field, Kind, Map, Migration, Schema,
-    Serializer, Value,
+        self as serialization, Error as SerializeError, Field, Kind, Map, Migration, Schema,
+        Serializer, Value,
 };
 pub use crate::data::{
         self as data, Codec as DataCodec, ComponentMap, ComponentType as DataComponentType, DataError,
@@ -1345,6 +1345,34 @@ pub use crate::data::{
 pub use crate::packs::{
         self as packs, MergeEntry, MergedFile, Pack, PackKind, PackManifest, PackMetadata,
         PackOverride,
+    };
+pub use crate::content::{self as content, ContentKind};
+pub use crate::game_rules::{
+        self as game_rules, GameRule, RuleChange, RuleError, BUILT_IN_TYPES, EVENT_CHANGED,
+    };
+pub use crate::gameplay::{
+        self as gameplay, Hook, Phase as HookPhase, RuleProfile, FAMILIES,
+    };
+// §61 — manager wires this into sdk/src/lib.rs prelude. `pub mod query;` is already present.
+    // §61 — `Filter` and `Record` already exist in this crate's prelude (textures::Filter,
+    // §61 — log::Record), so they are aliased. Query the prelude as `query::*` or by alias.
+pub use crate::query::{
+    self as query, Filter as QueryFilter, Index, Query, QueryError, Record as QueryRecord, Sort,
+};
+pub use crate::math::{
+        self as math, Aabb, Capsule, Color as MathColor, Easing, EulerAngles, Frustum as MathFrustum, IVec2, IVec3, Mat4 as MathMat4,
+        Matrix3, Matrix4, Obb, Plane as MathPlane, Pose, Quaternion, Ray as MathRay, RayHit as MathRayHit, Rect, Rgba, Rgba8, Size,
+        Sphere, Transform as MathTransform, Triangle, Vec2, Vec3 as MathVec3, Vec4,
+    };
+// §63 — manager wires these into the sdk/src/lib.rs prelude. `pub mod time;` is already there.
+    // §63 — do NOT `pub use crate::time::Timer`: a bare `Timer` already exists in this crate's
+// §63 — prelude. Keep it reachable as `time::Timer` (it is a different type: the tick timer).
+pub use crate::time::{self as time, Clock, Phase as DayPhase, Scheduler, Stopwatch};
+pub use crate::environment::{
+        self as environment, ActiveEffect, BiomeClimate, ClimateCategory, EffectKind, EffectSet,
+        EnvironmentClock, EnvironmentEffect, EnvironmentPiece, LightKind, LightModel, LightSource,
+        PieceKind, Precipitation, WeatherMachine, WeatherState, WeatherType, MAX_LIGHT,
+        MAX_SKY_DARKEN, RAMP_TICKS, SNOW_TEMPERATURE, TICKS_PER_DAY,
     };
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
@@ -1483,7 +1511,7 @@ pub use crate::packs::{
         Refusal, RespawnRules, WorldInfo,
     };
     pub use crate::worldgen::{
-        self as worldgen, Biome, Chunk, GenerationContext, GenerationPiece, Noise, PieceKind,
+        self as worldgen, Biome, Chunk, GenerationContext, GenerationPiece, Noise, PieceKind as WorldgenPieceKind,
         Random,
     };
     pub use crate::shaders::{

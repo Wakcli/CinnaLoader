@@ -30,7 +30,10 @@ def section_text(number: int) -> str:
 
 
 def wanted(number: int, module: str) -> list[str]:
-    names = re.findall(rf"^{module}::([a-z_0-9]+)", section_text(number), re.M)
+    text = section_text(number)
+    names = re.findall(rf"^{module}::([a-z_0-9]+)", text, re.M)
+    if not names:
+        names = re.findall(r"^([a-z_0-9]+)\(\)", text, re.M)
     return sorted(set(names))
 
 
@@ -117,13 +120,22 @@ def record(number: int, modules: list[str], total: int) -> None:
     summary = note[:300] if note else "See the section note in this file."
     apis = ROOT / "apis.md"
     lines = apis.read_text().split("\n")
+    row = f"| {number} | {title(number)} | {total} | done | {summary} |"
+    placed = False
     for index, line in enumerate(lines):
         if re.match(rf"^\| {number} \|", line):
-            cells = line.split("|")
-            lines[index] = (
-                f"| {number} | {title(number)} | {total} | done | {summary} |"
-            )
+            lines[index] = row
+            placed = True
             break
+    if not placed:
+        after = -1
+        for index, line in enumerate(lines):
+            found = re.match(r"^\| (\d+) \|", line)
+            if found and int(found.group(1)) < number:
+                after = index
+        if after < 0:
+            raise SystemExit(f"apis.md has no table row to insert section {number} after")
+        lines.insert(after + 1, row)
     body = "\n".join(lines)
     heading = f"### {number} — {title(number)}"
     if heading in body:
