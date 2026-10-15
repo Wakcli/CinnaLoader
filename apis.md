@@ -50,7 +50,7 @@ guide, not a contract.
 | 12 | Resource and asset management | 24 | done | Packs by namespace with priorities, overrides, reload listeners and a per-mod `assets/` pack |
 | 13 | Localization | 21 | done | Keys per language with a fallback, `one\|many` plurals, placeholders, and the handful of formats a player sees |
 | 14 | Game and session state | 33 | done | What the host observes itself: frames, ticks, rates, version, launch address, window, phase, its own two managers, and four recorded requests |
-| 15 | World and dimension APIs | 56 | todo |
+| 15 | World and dimension APIs | 56 | done | Every name exists and answers honestly: the world half is `None`/`false` with a reason (hooks this host does not have), the dimension half is a real registry mods declare into |
 | 16 | Block APIs | 50 | todo |
 | 17 | Item APIs | 47 | todo |
 | 18 | Inventory and containers | 50 | todo |
@@ -230,6 +230,30 @@ Verified in a live client: `version="1.26.50.4"`, `multiplayer=true`,
 `server=Some("127.0.0.1:19132")`, `online=true`, `window=Some(Window { 1280x720 })`, the
 session and runtime values, the registry and resource summaries, every unseen question
 `None`, and the request log with only the resource reload granted.
+
+### 15 — World and dimension APIs
+
+This is the first section that is mostly a refusal, and it is a refusal with reasons rather
+than `todo`. The client's world — chunks, blocks, entities, players, biome, weather, time,
+seed, spawn, border, save file — lives inside the client, and section 10 lists the
+capabilities that would read or change it as `never`
+(`needs hooks into the client's world and entity state`). Every `world::` name exists and
+answers `None`, `false` or an empty list, with the reason in `world::why_unknown`, and
+`world::refusals()` is the whole table for a panel or a report. `load`, `unload`, `save`,
+`mark_dirty`, `set_spawn_position`, `set_weather`, `load_chunk`, `unload_chunk`,
+`request_chunk`, `create_snapshot` and `restore_snapshot` log what they were asked and do
+nothing, because doing anything would be a lie about the client's state.
+
+`dimensions::*` is real. A mod declares the dimensions it would add — id, name, kind, bounds,
+gravity, its own clock, biome source, ambient properties and respawn rules — and every mod
+can read that registry back, by id or by name. `create` and `teleport_to_dimension` then
+answer honestly that this host cannot make the client act on a declaration: that is
+`CustomDimensions`, reported `never` in section 10, and the declaration stays a declaration.
+
+Verified in a live client: every `world::` question `None` or `false` with its warning in the
+log, the refusal table naming thirteen kinds of world state, and a declared `skylands`
+dimension read back with its bounds, gravity, clock, biome source, ambient properties and
+respawn rules, then unregistered.
 
 ## Open: a wild jump on the first frame
 

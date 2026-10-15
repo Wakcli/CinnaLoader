@@ -76,16 +76,22 @@ def candidates():
 
 
 def instructions(text):
-    """(id, first line, body) for each `##` heading under the marker."""
+    """(id, first line, body) for each instruction below the marker.
+
+    Two spellings count, because the user uses both: a `## heading`, and a line that starts
+    `INST-<number>:`, which is how they write a self-contained instruction without
+    renumbering the ones above it.
+    """
     start = text.find(MARKER)
     body = text[start + len(MARKER) :] if start >= 0 else text
     found = []
-    for block in re.split(r"^## +", body, flags=re.M)[1:]:
-        lines = block.strip().split("\n")
-        title = lines[0].strip()
-        if not title:
-            continue
+    # Split at either spelling, keeping the marker with the block it starts.
+    parts = re.split(r"^(?=## +|INST-\d+[:.])", body, flags=re.M)
+    for block in parts:
         whole = block.strip()
+        if not whole or not re.match(r"^(## +|INST-\d+[:.])", whole):
+            continue
+        title = whole.split("\n", 1)[0].strip().removeprefix("## ").strip()
         digest = hashlib.sha1(re.sub(r"\s+", " ", whole).encode()).hexdigest()[:12]
         found.append((digest, title, whole))
     return found

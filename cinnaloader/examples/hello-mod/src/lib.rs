@@ -864,6 +864,118 @@ impl Mod for Hello {
             info!("hello-mod initialised (mods from {})", mods_dir().unwrap_or("?"));
         });
 
+        // Section 15: the world (which this host cannot see) and the dimensions a mod can
+        // declare (which it can). One group per tick: every section doing its work inside one
+        // hook callback at once is what trips the hook layer (see AGENTS.md).
+        tasks::schedule_after_ticks(14, move || {
+            info!(
+                "world: get={:?} by_id={:?} by_name={:?} all={} loaded={:?}",
+                world::get(),
+                world::get_by_id("overworld"),
+                world::get_by_name("World"),
+                world::get_all().len(),
+                world::is_loaded(),
+            );
+            info!(
+                "world: load={} unload={} refusals={:?}",
+                world::load("overworld"),
+                world::unload(),
+                world::refusals()
+                    .into_iter()
+                    .map(|refusal| refusal.what)
+                    .collect::<Vec<_>>(),
+            );
+            info!(
+                "world: id={:?} name={:?} seed={:?} time={:?} day_time={:?} game_time={:?} difficulty={:?}",
+                world::known_only_to_the_client::get_id(),
+                world::known_only_to_the_client::get_name(),
+                world::known_only_to_the_client::get_seed(),
+                world::known_only_to_the_client::get_time(),
+                world::known_only_to_the_client::get_day_time(),
+                world::known_only_to_the_client::get_game_time(),
+                world::known_only_to_the_client::get_difficulty(),
+            );
+            info!(
+                "world: rules={:?} spawn={:?} set_spawn={} border={:?} height={:?}..{:?} chunks={}",
+                world::known_only_to_the_client::get_game_rules(),
+                world::known_only_to_the_client::get_spawn_position(),
+                world::known_only_to_the_client::set_spawn_position(0.0, 64.0, 0.0),
+                world::known_only_to_the_client::get_border(),
+                world::known_only_to_the_client::get_min_height(),
+                world::known_only_to_the_client::get_max_height(),
+                world::known_only_to_the_client::get_chunks().len(),
+            );
+            info!(
+                "world: chunk={:?} loaded={:?} load={} request={} players={} entities={} in_range={} in_box={} blocks={}",
+                world::known_only_to_the_client::get_chunk(0, 0),
+                world::known_only_to_the_client::is_chunk_loaded(0, 0),
+                world::known_only_to_the_client::load_chunk(0, 0),
+                world::known_only_to_the_client::request_chunk(0, 0),
+                world::known_only_to_the_client::get_players().len(),
+                world::known_only_to_the_client::get_entities().len(),
+                world::known_only_to_the_client::get_players_in_range(0.0, 64.0, 0.0, 16.0).len(),
+                world::known_only_to_the_client::get_entities_in_box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)).len(),
+                world::known_only_to_the_client::get_blocks_in_box((0, 0, 0), (1, 1, 1)).len(),
+            );
+            info!(
+                "world: weather={:?} set_weather={} biome={:?} dimension={:?} save_path={:?} metadata={:?} save={} dirty={} snapshot={:?} restore={}",
+                world::known_only_to_the_client::get_weather(),
+                world::known_only_to_the_client::set_weather("rain"),
+                world::known_only_to_the_client::get_biome(0, 64, 0),
+                world::known_only_to_the_client::get_dimension(),
+                world::known_only_to_the_client::get_save_path(),
+                world::known_only_to_the_client::get_metadata(),
+                world::known_only_to_the_client::save(),
+                world::known_only_to_the_client::mark_dirty(),
+                world::known_only_to_the_client::create_snapshot(),
+                world::known_only_to_the_client::restore_snapshot(1),
+            );
+            info!(
+                "dimensions: register={} get={:?}",
+                dimensions::register(
+                    DimensionDescription::new("skylands", "Skylands")
+                        .kind(DimensionKind::Custom)
+                        .bounds(-64, 320)
+                        .gravity(0.6)
+                        .time(12_000)
+                        .biome_source("minecraft:sky")
+                        .ambient(AmbientProperties {
+                            light: 0.8,
+                            fog_color: 0x00a0c0ff,
+                            sky_color: 0x0070a0ff,
+                            has_sky: true,
+                            has_weather: false,
+                        })
+                        .respawn(RespawnRules {
+                            dimension: "inkwell".to_owned(),
+                            world_spawn: true,
+                            respawn_anchor_works: true,
+                        })
+                ),
+                dimensions::get("skylands").map(|description| description.to_string()),
+            );
+            info!(
+                "dimensions: all={} by_name={:?} by_id={:?} type={:?} bounds={:?} gravity={:?} time={:?}",
+                dimensions::get_all().len(),
+                dimensions::get_by_name("Skylands").map(|description| description.name),
+                dimensions::get_by_id("skylands").map(|description| description.id),
+                dimensions::get_type("skylands"),
+                dimensions::get_bounds("skylands"),
+                dimensions::get_gravity("skylands"),
+                dimensions::get_time("skylands"),
+            );
+            info!(
+                "dimensions: biome={:?} ambient={:?} respawn={:?} created={} create={} teleport={}",
+                dimensions::get_biome_source("skylands"),
+                dimensions::get_ambient_properties("skylands"),
+                dimensions::get_respawn_rules("skylands").map(|rules| rules.dimension),
+                dimensions::is_created("skylands"),
+                dimensions::create("skylands"),
+                dimensions::teleport_to_dimension("skylands"),
+            );
+            info!("dimensions: unregister={}", dimensions::unregister("skylands"));
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

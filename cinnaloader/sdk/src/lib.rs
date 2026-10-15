@@ -61,6 +61,7 @@ pub mod mods;
 pub mod permissions;
 pub mod resources;
 pub mod storage;
+pub mod world;
 pub mod tasks;
 pub mod version;
 
@@ -1262,6 +1263,10 @@ pub mod prelude {
         self as resources, Provider, ResourceDependency, ResourceId, ResourceKind,
         ResourceLocation, ResourceManager, ResourceMetadata, ResourceOverride, ResourcePack,
         ResourceReloadListener, ResourceStack,
+    };
+    pub use crate::world::{
+        self as world, dimensions, AmbientProperties, DimensionDescription, DimensionKind,
+        Refusal, RespawnRules, WorldInfo,
     };
     pub use crate::storage::{
         self as storage, Format, Namespace, Storage, StoreError, StoreTransaction,
