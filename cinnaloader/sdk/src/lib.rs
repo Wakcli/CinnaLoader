@@ -1523,6 +1523,62 @@ pub use crate::migration::{
 pub use crate::crash::{
         self as crash, Crash, Group, Report as CrashReport, Snapshot,
     };
+// §83 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §83 — `pub mod installer;` is already declared (lib.rs:85) and s83 is already dispatched from
+    // §83 — examples/hello-mod/src/lib.rs (tick 110), so only the export below is new.
+    // §83 — COLLISIONS: a bare `Fingerprint` is already dev::Fingerprint (lib.rs:1432), and a bare
+    // §83 — `Manifest` will be packages::Manifest once §84 lands, so both are aliased here.
+    // §83 — The 27 wishlist names are reached as `installer::install`, `installer::verify_checksum`, …
+pub use crate::installer::{
+    self as installer, Fingerprint as PackageFingerprint, InstallError, InstallPlan,
+    InstallationStatus, Installed, Journal, JournalStep, Manifest as InstallManifest, PackageInfo,
+    PlanAction, PlanEntry, Repository, StepOutcome,
+};
+pub use crate::packages::{
+        self as packages, FileEntry, Header, Inspect, Manifest, Package, PackageError,
+        SecurityReport, SignatureCheck,
+    };
+// §85 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §85 — `pub mod loader;` is already declared (sdk/src/lib.rs:87); the module was a placeholder.
+    // §85 — `loader::LoaderState` is an enum (starting/loading/ready/failed). `diagnostics::LoaderState`
+    // §85 — is a different struct and is NOT in the prelude today; if it is ever exported bare, alias
+    // §85 — this one on the way in. Nothing else collides.
+    // §85 — the 32 wishlist names are reached as `loader::get`, `loader::get_version`,
+    // §85 — `loader::get_config`, `loader::get_service`, `loader::set_safe_mode`, …
+    // §85 — the demo is `examples/hello-mod/src/s85.rs`, already called at lib.rs:5149 (tick 110).
+pub use crate::loader::{
+    self as loader, ConfigError, FieldKind, GlobalService, Loader, LoaderConfig, LoaderPaths,
+    LoaderState, LoaderStateMachine, LogLevel, PhaseReport, PhaseTiming, ServiceError,
+    ServiceRequirement, TransitionError,
+};
+// §86 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §86 — `pub mod safe_mode;` is already declared (lib.rs:88) and s86 is already dispatched from
+    // §86 — examples/hello-mod/src/lib.rs (s86::run), so only the export below is new.
+    // §86 — no name here collides with the existing prelude; the types are safe to bring in bare.
+pub use crate::safe_mode::{
+    self as safe_mode, CrashRecord, DisabledMod, RecoveryReport, RecoveryStep, StartMode,
+    DEFAULT_THRESHOLD, DEFAULT_WINDOW_MILLIS, STORE,
+};
+// §87 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §87 — `pub mod features;` is already declared (lib.rs:89) and s87 is already dispatched from
+    // §87 — examples/hello-mod/src/lib.rs (s87::run), so only the export below is new.
+    // §87 — `FeatureAvailability` already names `version::FeatureAvailability` in the prelude, so this
+    // §87 — module's richer availability enum stays reachable as `features::FeatureAvailability`.
+pub use crate::features::{
+    self as features, Acknowledgement, Feature, FeatureError, FeatureReport, FeatureStage,
+    FeatureWarning,
+};
+// §88 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §88 — `pub mod tools;` is already declared (sdk/src/lib.rs:90) and s88 is already dispatched
+    // §88 — from examples/hello-mod/src/lib.rs (tick 110), so only the export below is new.
+    // §88 — `Kind` is already serialization::Kind, `Report` is testing::Report, `Document` is
+    // §88 — datadriven::Document, so those three are aliased; `Error` is aliased too, matching the
+    // §88 — `SerializeError`/`MigrationError` convention (never a bare `Error`). The rest are free.
+    // §88 — the 27 wishlist names are reached as `tools::register`, `tools::export_project`, …
+pub use crate::tools::{
+    self as tools, BuildReport, Change as ToolChange, Diff, Document as ToolDocument, EditorContext,
+    Error as ToolsError, Item, Problem, Project, Report as ToolReport, Tool, ToolKind,
+};
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
         State as DrawState, Transform,
