@@ -839,8 +839,13 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_lock::serial()
+    }
+
     #[test]
     fn listeners_run_in_phase_then_priority_order() {
+        let _serial = serial();
         let seen = Arc::new(Mutex::new(Vec::new()));
         let kind = "order-probe";
         register_event_type(kind);
@@ -867,6 +872,7 @@ mod tests {
 
     #[test]
     fn a_cancellable_event_can_be_cancelled_and_stopped() {
+        let _serial = serial();
         let kind = "cancel-probe";
         subscribe(kind, Priority::High, |event| {
             event.cancel();
@@ -890,6 +896,7 @@ mod tests {
 
     #[test]
     fn a_filter_keeps_a_listener_out_of_events_it_does_not_want() {
+        let _serial = serial();
         let kind = "filter-probe";
         let ran = Arc::new(Mutex::new(Vec::new()));
         let seen = Arc::clone(&ran);
@@ -907,6 +914,7 @@ mod tests {
 
     #[test]
     fn a_once_listener_runs_once() {
+        let _serial = serial();
         let kind = "once-probe";
         let calls = Arc::new(Mutex::new(0));
         let counter = Arc::clone(&calls);
@@ -921,6 +929,7 @@ mod tests {
 
     #[test]
     fn what_is_posted_waits_for_the_next_dispatch_point() {
+        let _serial = serial();
         let kind = "posted-probe";
         let calls = Arc::new(Mutex::new(0));
         let counter = Arc::clone(&calls);
@@ -939,6 +948,7 @@ mod tests {
 
     #[test]
     fn a_listener_can_be_moved_and_removed() {
+        let _serial = serial();
         let kind = "move-probe";
         let id = subscribe(kind, Priority::Low, |_| {});
         assert_eq!(get_listener_count(kind), 1);
@@ -954,6 +964,7 @@ mod tests {
 
     #[test]
     fn a_kind_can_be_registered_and_forgotten() {
+        let _serial = serial();
         assert!(is_registered_kind(kind::CLIENT_TICK));
         assert!(!is_registered_kind("mine:probe"));
         assert!(register_event_type("mine:probe"));
@@ -965,6 +976,7 @@ mod tests {
 
     #[test]
     fn a_listener_running_on_the_bus_sees_its_own_state() {
+        let _serial = serial();
         let kind = "state-probe";
         let inside = Arc::new(Mutex::new((false, false, false)));
         let seen = Arc::clone(&inside);

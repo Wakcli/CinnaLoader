@@ -42,7 +42,7 @@ guide, not a contract.
 | 4 | Dependencies and mod load order | 46 | done | ABI v8. `/tmp/opencode/s4-deps.png` + the run log: order, refusal, errors |
 | 5 | Capability system | 10 | done | `Capability` grew from 8 names to the wishlist's 38, with `supported()`/`why_unsupported()` saying honestly what a mod can be given here. Verified in a live client: `held=[Render, FilesystemRead, FilesystemWrite]`, `world_read=false`, `unsupported_why=needs hooks into the client's world and entity state` |
 | 6 | Event system | 24 | done | Bus with phases, priorities, filters, once, cancel and stop. Fired by the loader's own phases, so an event means the phase really happened |
-| 7 | Threading and task scheduling | 32 | todo |
+| 7 | Threading and task scheduling | 32 | done | Tick, delayed, repeating, render-phase, worker and pool tasks, with tokens, groups, metrics and thread checks. The rules are in the module docs |
 | 8 | Logging and diagnostics | 38 | todo |
 | 9 | Configuration system | 42 | todo |
 | 10 | Mod permissions and sandboxing | 16 | todo |
@@ -175,6 +175,18 @@ by the settings events that share it.
 `load_all`, `load`, `reload`, `unload`, `reload_all`, `unload_all` are `n/a` from inside a
 mod: the loader owns loading, there is no hot reload, and a mod asking to unload itself
 mid-call has no meaning here. Everything that *reads* the result is implemented.
+
+### 7 — Threading and task scheduling
+
+`schedule_network_thread` and `NetworkExecutor` are the honest refusal: the client owns its
+network thread and offers no queue into it, so they warn and return `None` rather than
+running network work on the wrong thread. Everything else runs: the tick queue (drained at
+the end of every tick), the render queue (drained in the frame's render phase), worker
+threads, and a `WorkerPool`.
+
+`wait` and `join` are bounded on purpose — a main-thread task cannot finish while the main
+thread waits, and a mod runs on the main thread, so these answer rather than stall the
+client. Results come back through `TaskResult`, read at the start of a tick.
 
 ## Already present (ABI v5)
 

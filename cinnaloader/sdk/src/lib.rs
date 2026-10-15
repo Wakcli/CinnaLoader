@@ -52,6 +52,7 @@ pub mod lifecycle;
 pub mod metadata;
 pub mod modinfo;
 pub mod mods;
+pub mod tasks;
 pub mod version;
 
 /// Bumped whenever `HostApi` or any entry-point signature changes. A mod whose
@@ -60,12 +61,24 @@ pub mod version;
 /// 8: the graph and `mods_command` slots, and a manifest declared before load.
 pub const ABI_VERSION: u32 = 8;
 
-/// Readable spelling for a toggle's `default`.
-pub const ON: bool = true;
+/// One lock for the tests of every module that touches a process-wide registry, so two
+/// tests never drain each other's queue.
+#[cfg(test)]
+pub(crate) mod test_lock {
+    use std::sync::{Mutex, MutexGuard};
+
+    pub fn serial() -> MutexGuard<'static, ()> {
+        static SERIAL: Mutex<()> = Mutex::new(());
+        SERIAL.lock().unwrap_or_else(|error| error.into_inner())
+    }
+}
+
 /// The capability system, under the name the wishlist uses.
 pub use capability as capabilities;
 
 /// Readable spelling for a toggle's `default`.
+pub const ON: bool = true;
+/// The other one.
 pub const OFF: bool = false;
 
 pub mod level {
@@ -893,6 +906,7 @@ fn guarded<T: Mod>(
 /// The body of a mod's `init`. Called by [`export_mod!`].
 #[doc(hidden)]
 pub fn load_body<T: Mod>(module: &mut T) -> i32 {
+    tasks::record_main_thread();
     let loader = loader_version();
     let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         !module.compatibility(&loader)
@@ -1009,6 +1023,8 @@ pub fn frame_body<T: Mod>(module: &mut T, dt_millis: u32, first: bool) -> i32 {
         module.tick(dt_millis);
         lifecycle::enter(lifecycle::Phase::TickEnd);
         module.tick_end(dt_millis);
+        // Whatever was scheduled for this tick runs now, before the frame ends.
+        tasks::run_due(dt_millis);
         true
     })
 }
@@ -1209,6 +1225,11 @@ pub mod prelude {
         self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,
     };
     pub use crate::mods;
+    pub use crate::tasks::{
+        self as tasks, AsyncResult, CancellationToken, JobGroup, JobQueue, MainThreadExecutor,
+        NetworkExecutor, RenderThreadExecutor, TaskExecutor, TaskHandle, TaskMetrics, TaskPriority,
+        TaskResult, TaskStatus, ThreadAffinity, WorkerPool,
+    };
     pub use crate::lifecycle::{
         cancel_pending_hooks, current_phase, defer_until_ready, is_initialized, is_ready,
         previous_version, register_cleanup, register_shutdown_handler, Phase,

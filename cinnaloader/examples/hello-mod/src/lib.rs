@@ -1,11 +1,15 @@
 //! Example Cinnaloader mod: one of every setting kind, a keybind and a timer.
 
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 use cinnaloader::prelude::*;
 
 /// Ticks seen, for a log line that would otherwise repeat every frame.
 static TICKS: AtomicU32 = AtomicU32::new(0);
+
+/// How many times the repeating task has run, so the log shows it stopping.
+static REPEATS: AtomicU32 = AtomicU32::new(0);
 
 fn self_ticks() -> u32 {
     TICKS.load(Ordering::Relaxed)
@@ -14,6 +18,11 @@ fn self_ticks() -> u32 {
 #[derive(Default)]
 struct Hello {
     ticks: AtomicU32,
+    /// The repeating task, for cancelling later.
+    beat_task: TaskHandle,
+    /// A worker's result, read on the tick.
+    worker: Option<TaskResult<(u64, String, bool)>>,
+    pool_result: Option<TaskResult<&'static str>>,
     /// Fires about once a second, wherever the loader ticks it.
     beat: Timer,
     /// Frames seen, so the render hooks can prove themselves once instead of every frame.
@@ -161,6 +170,63 @@ impl Mod for Hello {
         // A posted event waits for the end of the tick; a published one runs now.
         events::post(events::Event::new("hello:ready").with_text("queued during load"));
 
+        // Section 7: work for later, work off the thread, and the rules for both.
+        tasks::submit(|| info!("tasks: ran at the end of the tick"));
+        self.beat_task = tasks::schedule_repeating(Duration::from_millis(500), || {
+            let count = REPEATS.fetch_add(1, Ordering::Relaxed) + 1;
+            info!(
+                "tasks: repeat #{count} on {} thread={}",
+                tasks::current_thread(),
+                tasks::is_main_thread(),
+            );
+        });
+        tasks::schedule_after(Duration::from_secs(3), || info!("tasks: three seconds in"));
+        tasks::schedule_after_ticks(30, || info!("tasks: thirty ticks in"));
+        tasks::schedule_render_thread(|| {
+            info!(
+                "tasks: render task in phase {} on {}",
+                current_phase(),
+                tasks::current_thread(),
+            );
+        });
+        let never = tasks::schedule_after(Duration::from_secs(600), || {
+            info!("tasks: this must never run")
+        });
+        info!(
+            "tasks: cancel(never)={} status={:?}",
+            tasks::cancel(never),
+            tasks::get_status(never),
+        );
+        self.worker = Some(tasks::submit_with_result(|| {
+            let sum: u64 = (1..=1_000_000).sum();
+            (sum, tasks::current_thread(), tasks::is_main_thread())
+        }));
+        info!(
+            "tasks: queued={} pending={} metrics={:?}",
+            tasks::queue_length(),
+            tasks::get_pending().len(),
+            tasks::get_metrics(),
+        );
+        info!(
+            "tasks: thread={} id={} main={} render={} network={} assert_main={}",
+            tasks::current_thread(),
+            tasks::thread_id(),
+            tasks::is_main_thread(),
+            tasks::is_render_thread(),
+            tasks::is_network_thread(),
+            tasks::assert_main_thread(),
+        );
+        let refused = tasks::schedule_network_thread(|| {});
+        info!(
+            "tasks: network refusal={} executor={}",
+            refused.is_none(),
+            TaskExecutor::Network.submit(|| {}).is_none(),
+        );
+        let pool = WorkerPool::new(2);
+        let pooled: TaskResult<&'static str> = pool.submit_with_result(|| "pool job done");
+        info!("tasks: pool size={}", pool.size());
+        self.pool_result = Some(pooled);
+
         self.beat = Timer::every(1000);
         // A hook that cannot run yet, and one that runs as this mod is dropped.
         defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));
@@ -229,6 +295,26 @@ impl Mod for Hello {
     fn tick(&mut self, dt_millis: u32) {
         let tick = self.ticks.fetch_add(1, Ordering::Relaxed) + 1;
         TICKS.store(tick, Ordering::Relaxed);
+        // A background result is picked up on the tick, never waited for.
+        if let Some(result) = self.pool_result.as_ref() {
+            if let Some(text) = result.get() {
+                info!("tasks: pool returned {text:?}");
+                self.pool_result = None;
+            }
+        }
+        if let Some(worker) = self.worker.as_ref() {
+            if let Some((sum, thread, main)) = worker.get() {
+                info!("tasks: worker summed to {sum} on {thread} (main={main})");
+                self.worker = None;
+            }
+        }
+        if tick == 240 {
+            info!(
+                "tasks: cancelling the repeat, metrics={:?}",
+                tasks::get_metrics()
+            );
+            tasks::cancel(self.beat_task);
+        }
         // Twice through the tick counter: the mod switches itself off, and core_lib
         // switches it back on, which is how the enable and disable events get delivered.
         if tick == 5 {

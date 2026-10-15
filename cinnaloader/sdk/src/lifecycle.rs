@@ -238,6 +238,7 @@ fn announce(phase: Phase) {
         events::publish(Event::new(kind::GAME_TICK_START));
     }
     if matches!(phase, Phase::RenderStart) {
+        crate::tasks::run_render_due();
         events::dispatch_render_queue();
     }
     if matches!(phase, Phase::TickStart | Phase::TickEnd) {
@@ -281,6 +282,11 @@ pub(crate) fn record_version(version: &ModVersion) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The buses and queues are process-wide; the loader module's tests take this too.
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_lock::serial()
+    }
     use std::sync::atomic::AtomicUsize;
 
     static RAN: AtomicUsize = AtomicUsize::new(0);
@@ -291,6 +297,7 @@ mod tests {
 
     #[test]
     fn phases_round_trip_through_their_codes() {
+        let _serial = serial();
         for phase in [
             Phase::PreLoad,
             Phase::Load,
@@ -314,6 +321,7 @@ mod tests {
 
     #[test]
     fn deferred_hooks_run_once_the_loader_is_ready() {
+        let _serial = serial();
         cancel_pending_hooks();
         RAN.store(0, Ordering::SeqCst);
         defer_until_ready(bump);
@@ -330,6 +338,7 @@ mod tests {
 
     #[test]
     fn cleanups_and_shutdown_handlers_run_when_the_loader_calls_them() {
+        let _serial = serial();
         RAN.store(0, Ordering::SeqCst);
         register_cleanup(bump);
         register_shutdown_handler(bump);
@@ -341,6 +350,7 @@ mod tests {
 
     #[test]
     fn the_phase_is_readable_while_it_is_dispatching() {
+        let _serial = serial();
         enter(Phase::Tick);
         assert_eq!(current_phase(), Phase::Tick);
         enter(Phase::RenderStart);
