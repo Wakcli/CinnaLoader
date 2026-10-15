@@ -3038,6 +3038,112 @@ impl Mod for Hello {
             );
         });
 
+        // Section 38: input state a mod keeps, and the client's own devices.
+        tasks::schedule_after_ticks(56, move || {
+            if !demo(38) {
+                return;
+            }
+            input::clear();
+            info!(
+                "input: down={} press={} release={} keyboard={:?}",
+                input::is_key_down("W"),
+                input::is_key_pressed("W"),
+                input::is_key_released("W"),
+                input::get_keyboard_state(),
+            );
+            input::press("W");
+            info!(
+                "input: after press down={} pressed={} released={} device={:?}",
+                input::is_key_down("W"),
+                input::is_key_pressed("W"),
+                input::is_key_released("W"),
+                input::get_active_device(),
+            );
+            input::press("W");
+            info!(
+                "input: twice={:?}",
+                input::get_keyboard_state(),
+            );
+            input::release("W");
+            info!(
+                "input: after release down={} pressed={} released={}",
+                input::is_key_down("W"),
+                input::is_key_pressed("W"),
+                input::is_key_released("W"),
+            );
+            input::clear_edges();
+            info!("input: after clear_edges released={}", input::is_key_released("W"));
+            input::press("MouseLeft");
+            input::press("MouseRight");
+            input::move_to(100.0, 50.0);
+            input::move_by(10.0, -5.0);
+            input::scroll(0.0, 3.0);
+            input::set_modifiers(&["Shift", "Control"]);
+            info!(
+                "input: mouse={:?} position={:?} delta={:?} scroll={:?} left={} right={}",
+                input::get_mouse_state(),
+                input::get_mouse_position(),
+                input::get_mouse_delta(),
+                input::get_mouse_scroll(),
+                input::is_mouse_down("Left"),
+                input::is_mouse_down("Right"),
+            );
+            info!(
+                "input: modifiers={:?} device={:?} last={:?} updates_ok={}",
+                input::get_modifiers(),
+                input::get_active_device(),
+                input::get_last_input_device(),
+                input::get_keyboard_state().len() >= 2,
+            );
+            info!(
+                "input: keybind={} labelled={} get={:?} binds={} active={}",
+                input::register_keybind("hello:jump", "Space"),
+                input::register_keybind_labelled("hello:dash", "Dash", "LeftShift"),
+                input::get_keybind("hello:dash").map(|bind| bind.to_string()),
+                input::get_keybinds().len(),
+                input::is_keybind_active("hello:jump"),
+            );
+            input::press("Space");
+            info!(
+                "input: space down active_jump={} active_dash={} rebind={} active_after={}",
+                input::is_keybind_active("hello:jump"),
+                input::is_keybind_active("hello:dash"),
+                input::set_keybind("hello:jump", "J"),
+                input::is_keybind_active("hello:jump"),
+            );
+            info!(
+                "input: handler={} handlers={:?} capture={} captured={} release={}",
+                input::register_handler("F"),
+                input::get_handlers(),
+                input::capture_keyboard(),
+                input::is_keyboard_captured(),
+                input::release_keyboard(),
+            );
+            info!(
+                "input: client-side: controllers={:?} gamepad={:?} touch={:?} grab={:?} grab_pointer={} release={} refusals={:?}",
+                input::get_controller_state(),
+                input::get_gamepad_state(),
+                input::get_touch_state(),
+                input::get_pointer_grab(),
+                input::grab_pointer(),
+                input::release_pointer(),
+                input::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "input: unregister={} {} released={:?} clear={:?}",
+                input::unregister_keybind("hello:jump"),
+                input::unregister_handler("F"),
+                {
+                    input::release("Space");
+                    input::get_keyboard_state()
+                },
+                {
+                    input::clear();
+                    input::get_keyboard_state()
+                },
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

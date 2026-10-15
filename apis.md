@@ -761,6 +761,32 @@ and popping back, the vertical layout placing three widgets at y = 4, 26 and 48,
 wrapping the third onto row two, focus moving and clearing, a hover hit test finding
 `hello:play` at (50, 20), and every client call refused.
 
+### 38 — Input handling
+
+The loader reads the keyboard and the mouse with `device_query`, and this module turns what it
+sees into the state a mod asks about: `press`, `release`, `move_to`/`move_by`, `scroll` and
+`set_modifiers` update it (the SDK's own event loop does, in practice), and `is_key_down`,
+`is_key_pressed`, `is_key_released`, `is_mouse_down`/`pressed`/`released`,
+`get_mouse_position`, `get_mouse_delta`, `get_mouse_scroll`, `get_mouse_state`,
+`get_keyboard_state`, `get_modifiers`, `get_active_device` and `get_last_input_device` read
+it. A press that repeats does not double the key, a release clears the press edge,
+`clear_edges` forgets the edges without forgetting where the pointer is, and the delta is real
+arithmetic over the last two positions.
+
+Keybinds are real values a mod owns: `register_keybind` (with a label), `unregister_keybind`,
+`get_keybind`, `set_keybind`, `get_keybinds` and `is_keybind_active`, which asks the state
+whether the bound key is down — so a rebind changes the answer immediately. Handlers and the
+keyboard-capture flag are recorded for the caller's own loop.
+
+Refused: the client's own devices and its pointer grab, controllers and touch — with the
+reason that the loader only sees what X11 gives it while the game window has focus, which is
+also why a headless run cannot exercise a key at all.
+
+Verified in a run of the loader with the mod attached: the press/release edges and their
+clearing, two mouse buttons with the pointer at `(110, 45)` and a delta of `(10, -5)`, two
+modifiers, two keybinds with `hello:dash -> LeftShift`, `Space` making `hello:jump` active and
+a rebind to `J` making it inactive again, and every client device call refused.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside

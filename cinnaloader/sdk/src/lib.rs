@@ -60,6 +60,7 @@ pub mod game;
 pub mod graphics;
 pub mod hud;
 pub mod i18n;
+pub mod input;
 pub mod inventory;
 pub mod items;
 pub mod lifecycle;
@@ -1300,6 +1301,9 @@ pub mod prelude {
         self as hud, Alignment, Anchor, HudElement, HudLayer, KNOWN_ELEMENTS,
     };
     pub use crate::i18n::{self as i18n, Language, NumberStyle};
+    pub use crate::input::{
+        self as input, Button as InputButton, Device as InputDevice, InputState, Keybind,
+    };
     pub use crate::inventory::{
         self as inventory, ContainerType, Inventory, InventoryError, SlotKind,
         HOTBAR_FIRST, HOTBAR_LAST, MAIN_FIRST, MAIN_LAST, OFFHAND, ARMOUR_FIRST, ARMOUR_LAST,
