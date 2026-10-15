@@ -75,14 +75,15 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §20 entity components and attributes (commit `b71dbc1`). Sections 1–20
-  are done and verified in a live client; `apis.md` rows 1–20 say `done` and `checklist.md`
-  agrees. A background research agent mapped §15–24 in
-  `../cinnaloader-notes/SECTIONS-15-24.md`, so §21–24 can be worked from that mapping.
-- **In progress:** starting §21 player APIs.
-- **Next command:** `python3 tools/instructions.py check`, then work `## 21. Player APIs`
-  from the mapping: the local player's live state is the client's (refuse with a reason);
-  what a mod owns — player-shaped values, a hotbar selection it tracks — is real.
+- **Last finished:** §26 world generation (commit `07e520a`). Sections 1–26 are done and
+  verified in a live client; `apis.md` rows 1–26 say `done` and `checklist.md` agrees.
+- **In progress:** starting §27 recipes, crafting and smelting.
+- **Next command:** `python3 tools/instructions.py check`, then work `## 27. Recipes,
+  crafting, and smelting` from `../cinnaloader-notes/SECTIONS-25-40.md`, which classifies
+  every name in 25–40. That file says the mostly-real sections are §27 recipes, §28
+  registries, §30 rendering primitives, §34 models and animations and §39 camera, and that
+  **§28 is the foundational one** for 26/27/32/33/34/35/36/37 — so if a choice has to be
+  made, do §28 before the sections that build on it.
 - **Pattern the hook-only sections follow, so the next one goes fast:** a real *declaration*
   registry for what a mod ships (`.family`-style builders, read back by id and by name), a
   `why_unknown(what)` sentence per kind of client state, `refusals()` listing them, the
