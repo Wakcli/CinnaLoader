@@ -47,8 +47,10 @@ use std::{
 pub mod capability;
 pub mod compat;
 pub mod deps;
+pub mod diagnostics;
 pub mod events;
 pub mod lifecycle;
+pub mod log;
 pub mod metadata;
 pub mod modinfo;
 pub mod mods;
@@ -894,6 +896,7 @@ fn guarded<T: Mod>(
         Err(payload) => {
             let message = panic_message(payload);
             log(level::ERROR, &format!("{kind} panicked: {message}"));
+            diagnostics::note_crash(kind, &message);
             lifecycle::enter(lifecycle::Phase::Error);
             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 module.error("panic", &message);
@@ -1224,6 +1227,8 @@ pub mod prelude {
     pub use crate::events::{
         self as events, DispatchPhase, Event, ListenerInfo, Payload, Priority, kind,
     };
+    pub use crate::diagnostics;
+    pub use crate::log::{self as log, Level, Logger, Record};
     pub use crate::mods;
     pub use crate::tasks::{
         self as tasks, AsyncResult, CancellationToken, JobGroup, JobQueue, MainThreadExecutor,
@@ -1245,7 +1250,7 @@ pub mod prelude {
     };
     pub use crate::{
         button, choice, choice_index, config, enabled, error, export_mod, feature, hosted_api_version, info, key,
-        keybind, log, meta, mods_dir, number, overlay_line, set_config, set_enabled, set_number,
+        keybind, meta, mods_dir, number, overlay_line, set_config, set_enabled, set_number,
         slider, toggle_gui, warn, Mod, Timer, OFF, ON,
     };
 }

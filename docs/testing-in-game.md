@@ -68,7 +68,14 @@ python3 /home/wak/Cinna/cinnaloader/tools/mcp.py \
 `tools/mcp.py` wraps Cinnabar's client MCP (stdio JSON-RPC). It launches the client hidden
 (`headless: true`), with `LD_PRELOAD` pointing at the loader and `CINNALOADER_DIR` at the
 mods directory, and `CINNALOADER_MENU_OPEN=1` so the menu is open without a key press.
-Commands: `launch`, `sleep:SECONDS`, `shot:PATH`, `click:X,Y`, `quit`.
+Commands: `launch`, `sleep:SECONDS`, `shot:PATH`, `click:X,Y`, `key:NAME`, `quit`.
+Prefix a launch with `CINNALOADER_MENU_OPEN=0` to start with the menu closed, or
+`CINNALOADER_DIR=/somewhere` to point at another mods directory; anything already in this
+environment wins.
+
+The driver asks the client to quit at the end of a run, and only kills it if it will not.
+A bare `SIGTERM` lands mid-frame and takes the NVIDIA driver down with it — a vanilla client
+does the same — which leaves a coredump that looks like a bug in the loader and is not one.
 
 Read the client's log for the run:
 
@@ -92,6 +99,11 @@ line on its own is not.
 - **Anything that needs a visible window.** Do not open one for automated captures.
 
 ## 6. When it crashes
+
+Carefully: the client's own teardown faults in the NVIDIA driver under `SIGTERM` whether or
+not the loader is attached, so a dump from a killed run says nothing. A dump from a run that
+quit on its own does. Check `coredumpctl list` against how the run ended before reading
+anything into a crash.
 
 ```sh
 coredumpctl list --no-pager | tail -3

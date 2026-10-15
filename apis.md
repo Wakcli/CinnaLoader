@@ -43,7 +43,7 @@ guide, not a contract.
 | 5 | Capability system | 10 | done | `Capability` grew from 8 names to the wishlist's 38, with `supported()`/`why_unsupported()` saying honestly what a mod can be given here. Verified in a live client: `held=[Render, FilesystemRead, FilesystemWrite]`, `world_read=false`, `unsupported_why=needs hooks into the client's world and entity state` |
 | 6 | Event system | 24 | done | Bus with phases, priorities, filters, once, cancel and stop. Fired by the loader's own phases, so an event means the phase really happened |
 | 7 | Threading and task scheduling | 32 | done | Tick, delayed, repeating, render-phase, worker and pool tasks, with tokens, groups, metrics and thread checks. The rules are in the module docs |
-| 8 | Logging and diagnostics | 38 | todo |
+| 8 | Logging and diagnostics | 38 | done | Levelled log with sinks, filters, history, structured fields and error capture; a report, a health check and a capability report |
 | 9 | Configuration system | 42 | todo |
 | 10 | Mod permissions and sandboxing | 16 | todo |
 | 11 | Filesystem and storage | 47 | todo |
@@ -187,6 +187,35 @@ threads, and a `WorkerPool`.
 `wait` and `join` are bounded on purpose — a main-thread task cannot finish while the main
 thread waits, and a mod runs on the main thread, so these answer rather than stall the
 client. Results come back through `TaskResult`, read at the start of a tick.
+
+### 8 — Logging and diagnostics
+
+The log pipeline keeps the loader's own log as the destination and adds what the wishlist
+asks for on top: a level with per-target filters, sinks that see a record before it is
+written, a 256-line history, `with_context`, structured `event`, error capture, and the
+macros routed through the same path.
+
+`diagnostics::report()` is the one block a bug report needs; `run_health_check()` compares
+what the mod declared with what it has (missing permissions, unsupported capabilities,
+missing dependencies, errors logged, panics caught, a task queue that is not draining);
+`export_report(None)` writes it into the mod's data directory.
+
+Heavy diagnostics reads in the example are deferred to the first tick rather than done in
+`load`, see the note below on the crash that produced that decision.
+
+## Open: a wild jump on the first frame
+
+Five client runs crashed with a wild jump (rip ~850 MB past the executable's image, in no
+mapping) about two seconds after the loader hooked the panel, with the same mod that then
+ran cleanly in the CLI, which has no hooks. The trigger tracks what the mod does during
+`load`: the same mod with only its logging half, or only its diagnostics half, survived;
+both halves together crashed, and moving the diagnostics reads to the first tick fixed it
+without losing any coverage. The panel hook is the only hook in that path and is the
+suspect. Repeated for the record in `cinnaloader-notes/STATUS.md`.
+
+Separately: a client killed with `SIGTERM` faults inside the NVIDIA driver on the way out
+whether or not the loader is attached, so `tools/mcp.py` now asks it to quit first and each
+run's coredump situation has to be read against how the run ended.
 
 ## Already present (ABI v5)
 

@@ -106,6 +106,7 @@ impl Mod for Hello {
         button("reset", "Reset settings", "Debug");
 
         // Section 6: the events the loader fires for this mod, and the ones it queues.
+        info!("log: before load's own lines, this is the first thing written");
         events::register_event_type("hello:ready");
         events::subscribe(kind::GAME_STARTED, Priority::Low, |_| {
             info!("event: game_started");
@@ -167,9 +168,80 @@ impl Mod for Hello {
                 .collect::<Vec<_>>(),
             events::known_kinds().len(),
         );
+        // Diagnostics read after the loader has finished starting up, which is when they
+        // say something worth logging.
+        tasks::submit(move || {
+            info!("diagnostics: environment={:?}", diagnostics::get_environment());
+            info!("diagnostics: runtime={:?}", diagnostics::get_runtime_info());
+            info!("diagnostics: game={:?}", diagnostics::get_game_state());
+            info!("diagnostics: loader={:?}", diagnostics::get_loader_state());
+            info!("diagnostics: mod_status={:?}", diagnostics::get_mod_status());
+            info!("diagnostics: memory={:?}", diagnostics::get_memory_usage());
+            info!("diagnostics: threads={:?}", diagnostics::get_active_threads());
+            info!("diagnostics: errors={}", diagnostics::get_recent_errors().len());
+            for row in diagnostics::get_capability_report()
+            .into_iter()
+            .filter(|row| row.declared)
+        {
+                    info!("diagnostics: capability {row}");
+        }
+            diagnostics::note("load finished");
+            info!("diagnostics: timeline={:?}", diagnostics::get_timeline());
+            info!("diagnostics: report_bytes={}", diagnostics::report().len());
+            match diagnostics::export_report(None) {
+                Ok(path) => info!("diagnostics: report written to {}", path.display()),
+                Err(error) => warn!("diagnostics: could not write the report: {error}"),
+        }
+
+        });
+
         // A posted event waits for the end of the tick; a published one runs now.
         events::post(events::Event::new("hello:ready").with_text("queued during load"));
 
+        // Section 8: the log this mod owns, and what a report says about it.
+        log::capture_panics();
+        log::capture_errors(true);
+        log::set_level(Level::Debug);
+        let sink = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let collected = std::sync::Arc::clone(&sink);
+        log::register_sink_with_flush(
+            "hello:tally",
+            move |record: &Record| {
+                collected.lock().unwrap().push(record.render());
+            },
+            Some(|| info!("log: the tally sink was flushed")),
+        );
+        log::set_filter("hello_mod", Level::Trace);
+        log::trace("log: trace through the filter");
+        log::debug("log: debug line");
+        log::info("log: info line");
+        log::warn("log: warn line");
+        log::error("log: error line, kept for the report");
+        log::fatal("log: fatal line, kept whether capture is on or not");
+        log::event("hello:beat", &[("tick", "0"), ("why", "load")]);
+        log::with_context("phase=load", || log::debug("log: inside a context"));
+        log::report_deprecation("meta!()", "export_mod!(T, manifest = ...)");
+        log::report_warning("the example log is loud", "section 8 is the point");
+        log::report_exception("ExampleError", "the example threw");
+        log::get_structured_logger("hello:assets").structured(
+            Level::Info,
+            "log: structured",
+            &[("files", "3"), ("bytes", "4096")],
+        );
+        info!(
+            "log: level={} filters={:?} sinks={:?} recent={} counters={:?} enabled(trace)={}",
+            log::get_level(),
+            log::get_filters(),
+            log::sinks(),
+            log::get_recent(64).len(),
+            log::counters(),
+            log::is_enabled(Level::Trace),
+        );
+        info!(
+            "log: format_error={:?}",
+            log::format_error(&std::io::Error::new(std::io::ErrorKind::NotFound, "no such file"))
+        );
+        info!("log: flushed {} sink(s)", log::flush());
         // Section 7: work for later, work off the thread, and the rules for both.
         tasks::submit(|| info!("tasks: ran at the end of the tick"));
         self.beat_task = tasks::schedule_repeating(Duration::from_millis(500), || {

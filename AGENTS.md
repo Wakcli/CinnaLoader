@@ -49,13 +49,12 @@ So:
 
 ### Where I am
 
-- **Last finished:** §4 dependencies and mod load order, ABI v8 — commit `97218d9`, pushed
-  to `dev`. Evidence: `/tmp/opencode/s4-deps.png` plus the run log (a mod with an absent
-  requirement refused before `load`, `order=["core_lib","hello_mod"]`).
-- **In progress:** starting §5 capability system, from a clean tree.
-- **Next command:** read `## 5. Capability system` in the wishlist, then add the
-  capability set to `cinnaloader/sdk/src/capability.rs` with the loader checking it against
-  the host's supported list before load.
+- **Last finished:** §8 logging and diagnostics, commit pending at the time of writing.
+  Sections 1–8 are done; `apis.md` rows 1–8 say `done` and `checklist.md` agrees.
+- **In progress:** starting §9 configuration system.
+- **Next command:** read `## 9. Configuration system` in the wishlist, then extend
+  `cinnaloader/sdk/src` with the config surface the loader already backs (the per-mod `.cfg`
+  files) plus the wishlist's accessors, and verify in a client run.
 - **Blocked (carried forward):** keybinds cannot be exercised headlessly (`device_query`
   needs a focused window) and synthetic clicks do not reach the panel, so those stay
   verified-by-CLI-and-unit-test with the reason recorded in the row.
@@ -134,6 +133,15 @@ In practice: the working branch is `dev`. `main` is the base it came from; put w
   loader's own key loop. Do not describe clicks as working.
 - **Kill every headless client before the next run.** Leftovers contend for the GPU and
   produce `DeviceLost` exits that look like crashes in our code.
+- **A killed client faults in the NVIDIA driver on the way out, loader or not.** A vanilla
+  client does it too under `SIGTERM`. `tools/mcp.py` asks the client to quit instead of
+  killing it, and a coredump is only worth reading when the run ended on its own.
+- **The panel hook is the only hook here whose safety is unproven.** A mod that did heavy
+  work during `load` (a report built inline, several hundred allocations) tripped a wild
+  jump on the first frame — rip in no mapping at all — five times out of five, while the
+  same mod ran cleanly in the CLI, which installs no hooks. Moving that work to the first
+  tick made it stable. If a run dies right after `menu hooked`, suspect the hook layer
+  before the mod, and reproduce in the CLI (`cinnaloader run <mods>`) to tell them apart.
 
 ## Cinnabar reference
 
