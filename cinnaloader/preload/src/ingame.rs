@@ -41,6 +41,12 @@ type SetDebugLines = unsafe extern "sysv64" fn(*mut u8, *mut u8);
 static OPEN: AtomicBool = AtomicBool::new(false);
 static CURSOR: AtomicUsize = AtomicUsize::new(0);
 
+thread_local! {
+    /// When the previous frame started, so a tick knows how long it has been.
+    static FRAME_STARTED: std::cell::Cell<std::time::Instant> =
+        std::cell::Cell::new(std::time::Instant::now());
+}
+
 /// The symbols the menu needs, as substrings of their mangled names.
 const NEEDLES: [&str; 5] = [
     "capture_hud_frame",
@@ -81,6 +87,13 @@ pub fn install() {
         hook_closure_jmp_back(
             address,
             move |regs: *mut Registers| {
+                let now = std::time::Instant::now();
+                let dt = now.saturating_duration_since(FRAME_STARTED.with(|slot| {
+                    let previous = slot.get();
+                    slot.set(now);
+                    previous
+                }));
+                loader::frame(u32::try_from(dt.as_millis()).unwrap_or(u32::MAX));
                 let presentation = (*regs).rcx as *mut u8;
                 if presentation.is_null() {
                     return;

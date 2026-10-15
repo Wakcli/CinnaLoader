@@ -28,7 +28,13 @@ static MANIFEST: OnceLock<ModManifest> = OnceLock::new();
 /// );
 /// ```
 pub fn declare(manifest: ModManifest) -> bool {
-    crate::install_manifest(&manifest) && MANIFEST.set(manifest).is_ok()
+    if !crate::install_manifest(&manifest) {
+        return false;
+    }
+    // A version change since the last run means the mod's own data may need moving; the
+    // loader is told, and `Mod::migrate` follows `load`.
+    crate::note_declaration(&manifest);
+    MANIFEST.set(manifest).is_ok()
 }
 
 /// What this mod declared, or an empty manifest if it has not declared yet.
@@ -284,19 +290,30 @@ pub fn plugin_directory() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// The manifest slot is process-wide, so these two run one at a time.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        SERIAL.lock().unwrap_or_else(|error| error.into_inner())
+    }
 
     #[test]
-    fn an_undeclared_mod_still_answers() {
-        // Tests share a process, so this only asserts the fallback never panics.
-        let manifest = manifest();
-        assert!(!manifest.id.is_empty());
+    fn a_mod_without_a_loader_still_answers() {
+        let _serial = serial();
+        // No loader is installed in a unit test, so every answer comes from the manifest
+        // slot; assert only that it is coherent rather than empty.
         let report = report();
-        assert_eq!(report.manifest.id, manifest.id);
+        assert!(!report.mod_name.is_empty());
+        assert!(!report.manifest.id.is_empty());
         assert!(!is_reloading());
+        assert_eq!(state(), report.state);
     }
 
     #[test]
     fn a_declared_manifest_is_readable_without_a_loader() {
+        let _serial = serial();
         assert!(declare(
             ModManifest::new("probe", "Probe", "1.0")
                 .author("someone")

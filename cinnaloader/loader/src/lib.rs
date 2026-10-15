@@ -16,14 +16,16 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use cinnaloader::lifecycle::Phase;
 use cinnaloader::modinfo::{ModEntrypoint, ModInfo, ModManifest, State};
 use cinnaloader::HostApi;
 use libloading::{Library, Symbol};
 
 type AbiFn = extern "C" fn() -> u32;
 type InitFn = unsafe extern "C" fn(*const HostApi) -> i32;
-type FrameFn = extern "C" fn(u32);
-type ShutdownFn = extern "C" fn();
+type FrameFn = extern "C" fn(u32) -> i32;
+type PhaseFn = extern "C" fn(u32) -> i32;
+type ShutdownFn = extern "C" fn() -> i32;
 
 /// One mod, kept alive by the library handle beside it.
 struct Loaded {
@@ -36,6 +38,7 @@ struct Loaded {
     /// Kept alive for the pointers the mod captured; never read here.
     _api: Box<HostApi>,
     frame: Option<FrameFn>,
+    phase: Option<PhaseFn>,
     shutdown: Option<ShutdownFn>,
 }
 
@@ -165,6 +168,67 @@ struct ModRecord {
 
 static RECORDS: OnceLock<Mutex<Vec<ModRecord>>> = OnceLock::new();
 
+/// Mods the loader switched off after a panic, so one bad mod cannot take the rest down.
+static FAILED: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+
+fn failed() -> &'static Mutex<Vec<String>> {
+    FAILED.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// The process's first [`Host`], for the client's frame boundaries.
+static HOST: OnceLock<Mutex<Option<Host>>> = OnceLock::new();
+
+fn host_slot() -> &'static Mutex<Option<Host>> {
+    HOST.get_or_init(|| Mutex::new(None))
+}
+
+/// Keeps the host where the frame hook can reach it. The preload calls this instead of
+/// keeping the host on its own thread.
+pub fn hand_over(host: Host) {
+    if let Ok(mut slot) = host_slot().lock() {
+        *slot = Some(host);
+    }
+}
+
+/// One client frame: the render phases around one tick. The preload's frame hook calls this
+/// each frame, so mods tick at the client's rate and see frame boundaries.
+pub fn frame(dt_millis: u32) {
+    walk_phase(Phase::RenderStart);
+    if let Ok(mut slot) = host_slot().lock() {
+        if let Some(host) = slot.as_mut() {
+            host.tick(dt_millis);
+        }
+    }
+    walk_phase(Phase::RenderEnd);
+}
+
+/// Hands one phase to every mod. The client's frame hook drives the render phases with it.
+pub fn walk_phase(phase: Phase) {
+    if let Ok(mut slot) = host_slot().lock() {
+        if let Some(host) = slot.as_mut() {
+            host.walk(phase);
+        }
+    }
+}
+
+/// Whether the mod was switched off after a panic.
+#[must_use]
+pub fn mod_failed(name: &str) -> bool {
+    failed()
+        .lock()
+        .map(|names| names.iter().any(|failed| failed == name))
+        .unwrap_or(false)
+}
+
+fn mark_failed(name: &str) {
+    if let Ok(mut names) = failed().lock() {
+        if !names.iter().any(|failed| failed == name) {
+            eprintln!("[cinnaloader] {name} panicked and is switched off");
+            names.push(name.to_owned());
+        }
+    }
+}
+
 fn records() -> &'static Mutex<Vec<ModRecord>> {
     RECORDS.get_or_init(|| Mutex::new(Vec::new()))
 }
@@ -238,17 +302,20 @@ fn mod_info(name: &str) -> ModInfo {
     });
     let (library, loading) = held.unwrap_or((None, false));
     let enabled = mod_enabled(name);
+    let state = if mod_failed(name) {
+        State::Failed
+    } else if loading {
+        State::Loading
+    } else if enabled {
+        State::Loaded
+    } else {
+        State::Disabled
+    };
     ModInfo {
         manifest: declared_manifest(name),
         directory: config_dir().map(|dir| dir.join(name)),
         mod_name: name.to_owned(),
-        state: if loading {
-            State::Loading
-        } else if enabled {
-            State::Loaded
-        } else {
-            State::Disabled
-        },
+        state,
         enabled,
         reloading: false,
         library,
@@ -687,10 +754,9 @@ unsafe extern "C" fn host_set_config(key: *const c_char, value: *const c_char) -
         .filter(|(saved, _)| saved.starts_with('!'))
         .collect();
     let full = format!("!{key}");
-    match values.iter_mut().find(|(saved, _)| saved == &full) {
-        Some(entry) => entry.1 = value,
-        None => values.push((full, value)),
-    }
+    // A hand-edited file may repeat a key; keep exactly one.
+    values.retain(|(saved, _)| saved != &full);
+    values.push((full, value));
     save_config(&mod_name, &values);
     1
 }
@@ -942,6 +1008,10 @@ impl Host {
             }
         }
         let _ = MOD_NAMES.set(host.mods.iter().map(|module| module.name.clone()).collect());
+        // Now that every mod is loaded, walk the phases that only make sense afterwards.
+        for phase in [Phase::Initialize, Phase::PostInitialize, Phase::Ready] {
+            host.walk(phase);
+        }
         Ok(host)
     }
 
@@ -961,14 +1031,38 @@ impl Host {
         self.mods.is_empty()
     }
 
-    /// Advances every enabled mod's frame by `dt_millis`, delivering that mod's queued
-    /// feature changes first.
+    /// Advances every enabled mod's frame by `dt_millis`. A mod that panics is switched
+    /// off and skipped from then on, so the others keep running.
     pub fn tick(&mut self, dt_millis: u32) {
         for module in &self.mods {
-            if let Some(frame) = module.frame.filter(|_| mod_enabled(&module.name)) {
+            if !mod_enabled(&module.name) || mod_failed(&module.name) {
+                continue;
+            }
+            if let Some(frame) = module.frame {
                 enter_mod(&module.name);
-                frame(dt_millis);
+                let code = frame(dt_millis);
                 leave_mod();
+                if code != 0 {
+                    mark_failed(&module.name);
+                }
+            }
+        }
+    }
+
+    /// Hands one lifecycle phase to every mod that answers it.
+    fn walk(&mut self, phase: Phase) {
+        for module in &self.mods {
+            if mod_failed(&module.name) {
+                continue;
+            }
+            let Some(phase_fn) = module.phase else {
+                continue;
+            };
+            enter_mod(&module.name);
+            let code = phase_fn(phase.code());
+            leave_mod();
+            if code != 0 {
+                mark_failed(&module.name);
             }
         }
     }
@@ -1030,6 +1124,9 @@ impl Host {
         let frame = unsafe { library.get(b"cinnaloader_frame\0") }
             .ok()
             .map(|symbol| *symbol);
+        let phase = unsafe { library.get(b"cinnaloader_phase\0") }
+            .ok()
+            .map(|symbol| *symbol);
         let shutdown = unsafe { library.get(b"cinnaloader_shutdown\0") }
             .ok()
             .map(|symbol| *symbol);
@@ -1040,6 +1137,7 @@ impl Host {
             _name: name_c,
             _api: api,
             frame,
+            phase,
             shutdown,
         });
         Ok(name)
@@ -1197,6 +1295,19 @@ mod tests {
         assert_eq!(info.state, State::Disabled);
         assert!(!info.enabled);
         set_mod_enabled(&name, true);
+    }
+
+    #[test]
+    fn a_failed_mod_is_reported_but_still_enabled() {
+        let _serial = serial();
+        let name = format!("cinnaloader-failed-{}", std::process::id());
+        remember(&name, ModManifest::new(&name, &name, "1.0"), None);
+        assert!(!mod_failed(&name));
+        mark_failed(&name);
+        assert!(mod_failed(&name), "a panic switches the mod off");
+        let info = mod_info(&name);
+        assert_eq!(info.state, State::Failed);
+        assert!(info.enabled, "failed is its own state, not a user toggle");
     }
 
     #[test]

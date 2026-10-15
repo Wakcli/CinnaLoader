@@ -9,6 +9,8 @@ struct Hello {
     ticks: AtomicU32,
     /// Fires about once a second, wherever the loader ticks it.
     beat: Timer,
+    /// Frames seen, so the render hooks can prove themselves once instead of every frame.
+    frames: AtomicU32,
 }
 
 impl Mod for Hello {
@@ -71,6 +73,9 @@ impl Mod for Hello {
         button("reset", "Reset settings", "Debug");
 
         self.beat = Timer::every(1000);
+        // A hook that cannot run yet, and one that runs as this mod is dropped.
+        defer_until_ready(|| info!("lifecycle: deferred hook ran once the loader was ready"));
+        register_cleanup(|| info!("lifecycle: cleanup ran while unloading"));
         // Whatever the user last chose, kept next to the mods.
         if let Some(name) = config("name") {
             info!("hello-mod remembered {name}");
@@ -94,6 +99,42 @@ impl Mod for Hello {
             ));
         }
         info!("hello-mod alive: {seconds}s (+{} ms)", dt_millis);
+    }
+
+    fn migrate(&mut self, from: &ModVersion, to: &ModVersion) {
+        info!("lifecycle: migrate {from} -> {to} (saved data is mine to move)");
+    }
+
+    fn initialize(&mut self) {
+        info!("lifecycle: initialize (phase {})", current_phase());
+    }
+
+    fn post_initialize(&mut self) {
+        info!("lifecycle: post_initialize");
+    }
+
+    fn ready(&mut self) {
+        info!("lifecycle: ready, initialized={} ready={}", is_initialized(), is_ready());
+    }
+
+    fn config_loaded(&mut self) {
+        info!("lifecycle: config_loaded (saved settings are in effect)");
+    }
+
+    fn tick_start(&mut self, _dt_millis: u32) {
+        if self.ticks.load(Ordering::Relaxed) == 1 {
+            info!("lifecycle: first tick_start");
+        }
+    }
+
+    fn render_start(&mut self) {
+        if self.frames.fetch_add(1, Ordering::Relaxed) == 0 {
+            info!("lifecycle: first frame (render_start), phase {}", current_phase());
+        }
+    }
+
+    fn error(&mut self, kind: &str, message: &str) {
+        info!("lifecycle: caught {kind}: {message}");
     }
 
     fn toggle(&mut self, id: &str, on: bool) {
@@ -120,8 +161,12 @@ impl Mod for Hello {
     }
 
     fn unload(&mut self) {
-        info!("hello-mod shutting down");
+        info!("hello-mod unloading");
         overlay_line("cinnaloader: hello-mod offline");
+    }
+
+    fn shutdown(&mut self) {
+        info!("lifecycle: shutdown");
     }
 }
 

@@ -8,7 +8,7 @@
 mod ingame;
 mod panel;
 
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
 use cinnaloader_loader::Host;
 
@@ -16,9 +16,6 @@ use cinnaloader_loader::Host;
 pub const MODS_DIR_ENV: &str = "CINNALOADER_DIR";
 /// Set by the first process to load the runtime; children inherit it and skip loading.
 const ACTIVE_ENV: &str = "CINNALOADER_ACTIVE";
-/// Milliseconds between ticks.
-const TICK_MILLIS: u64 = 16;
-
 #[ctor::ctor]
 fn start() {
     if std::env::var_os(ACTIVE_ENV).is_some() || !primary_process() {
@@ -47,13 +44,9 @@ fn start() {
     // must not be written while another thread is inside the target function. The
     // targeted symbol lookup keeps this from holding up startup.
     ingame::install();
-    std::thread::spawn(move || {
-        let mut host = host;
-        loop {
-            host.tick(TICK_MILLIS as u32);
-            std::thread::sleep(Duration::from_millis(TICK_MILLIS));
-        }
-    });
+    // The client's own frames drive the mods: the frame hook ticks them and brackets each
+    // frame with the render phases, so there is no second clock to keep in step.
+    cinnaloader_loader::hand_over(host);
 }
 
 /// Pins the target to X11 when Xwayland is available.
