@@ -50,6 +50,7 @@ pub mod compat;
 pub mod components;
 pub mod config;
 pub mod deps;
+pub mod draw;
 pub mod diagnostics;
 pub mod effects;
 pub mod entities;
@@ -1268,6 +1269,10 @@ pub mod prelude {
         CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
         LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
         ResolutionErrorKind, SoftDependency, VersionedDependency,
+    };
+    pub use crate::draw::{
+        self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
+        State as DrawState, Transform,
     };
     pub use crate::effects::{
         self as effects, damage, DamageInstance, DamageModifier, DamageModifierKind,

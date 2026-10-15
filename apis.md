@@ -599,6 +599,28 @@ texture uploads, shader reloads, the camera, the view/projection/model matrices,
 framebuffer, render target, device and backend, and `request_frame`. The seventeen render
 event names are registered on the bus so a mod's subscription is already in place.
 
+### 30 — Rendering primitives
+
+Everything the wishlist lists is a value in a `DrawList`: lines, rectangles (plain, filled,
+rounded, gradient), circles, ellipses, triangles, polygons, polylines, quads, boxes (solid and
+wireframe), spheres, cylinders, cones, capsules, meshes, text (plain, shadowed, outlined),
+textured rectangles, textures, sprites, item/block/entity icons, scissors and clip rectangles
+— 49 names, each with its own command. The state goes with them: colour, alpha, blend mode,
+depth test and write, cull mode and line width, snapshotted onto every command as it is added.
+
+The transforms are a real 3×3 affine stack and compose the way an immediate-mode renderer's
+do: the transform a caller adds last acts on local coordinates and the one added first
+positions the result, which is what makes `translate(10, 20)` then `filled_rect(0, 0, …)` put
+the rectangle where the caller meant. `push_transform`/`pop_transform` bracket it,
+`inverted()` rounds a point trip exactly, and a singular transform refuses to invert. Verified
+in a live client: `translate(10, 20)` taking `(1, 1)` to `(11, 21)`, a quarter turn taking
+`(1, 0)` to `(0, 1)`, and an inverse taking `(4, 4)` back to `(2, 2)`.
+
+`flush` is where the honesty is: this host's only drawing is the loader's overlay line, so a
+flush draws the *text* commands there and counts everything else as a draw call it could not
+issue — `get_draw_calls` reports both. Verified in a live client: a 25-command list flushed
+with 3 drawn and 22 undrawn, and every refusal carrying its reason.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside

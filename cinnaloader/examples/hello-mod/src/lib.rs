@@ -2338,6 +2338,65 @@ impl Mod for Hello {
             );
         });
 
+        // Section 30: a draw list a mod builds, and the little of it this host can draw.
+        tasks::schedule_after_ticks(42, move || {
+            let mut list = draw::DrawList::new();
+            list.set_color([1.0, 0.2, 0.2, 1.0]).set_alpha(0.9);
+            list.translate(10.0, 20.0);
+            list.push_transform();
+            list.scale(2.0, 2.0).rotate(90.0);
+            list.line(0.0, 0.0, 10.0, 0.0);
+            list.pop_transform();
+            list.rect(0.0, 0.0, 100.0, 20.0);
+            list.filled_rect(0.0, 0.0, 100.0, 20.0);
+            list.rounded_rect(0.0, 0.0, 60.0, 20.0, 4.0);
+            list.gradient_rect(0.0, 0.0, 60.0, 20.0, [1.0; 4], [0.0, 0.0, 0.0, 1.0]);
+            list.circle(30.0, 10.0, 8.0);
+            list.filled_circle(30.0, 10.0, 8.0);
+            list.ellipse(30.0, 10.0, 8.0, 4.0);
+            list.triangle((0.0, 0.0), (10.0, 0.0), (5.0, 8.0));
+            list.polygon(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)], true);
+            list.polyline(&[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0)]);
+            list.quad([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+            list.wireframe_box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0));
+            list.sphere((0.0, 64.0, 0.0), 1.0, 16);
+            list.cylinder((0.0, 64.0, 0.0), 1.0, 2.0);
+            list.cone((0.0, 64.0, 0.0), 1.0, 2.0);
+            list.capsule((0.0, 64.0, 0.0), (0.0, 65.0, 0.0), 0.5);
+            list.mesh("hello:mesh", 24);
+            list.text("hello from a draw list", 4.0, 4.0);
+            list.text_shadow("with a shadow", 4.0, 20.0);
+            list.outlined_text("outlined", 4.0, 36.0);
+            list.textured_rect("hello:tex", 0.0, 0.0, 8.0, 8.0);
+            list.sprite("hello:sprite", 0.0, 0.0);
+            list.icon(draw::IconKind::Item, "minecraft:stone", 0.0, 0.0);
+            list.scissor(0.0, 0.0, 100.0, 20.0);
+            info!(
+                "draw: list={list} commands={} transform={:?} state={:?}",
+                list.len(),
+                list.transform().apply((1.0, 1.0)),
+                list.state().color,
+            );
+            let (drawn, undrawn) = list.flush();
+            info!(
+                "draw: flushed drawn={drawn} undrawn={undrawn} total={:?} empty={}",
+                draw::get_draw_calls(),
+                list.is_empty(),
+            );
+            info!(
+                "draw: transform: translated={:?} rotated={:?} scaled={:?} inverted={:?}",
+                draw::Transform::translation(5.0, 5.0).apply((1.0, 1.0)),
+                draw::Transform::rotation(90.0).apply((1.0, 0.0)),
+                draw::Transform::scaling(3.0, 3.0).apply((1.0, 1.0)),
+                draw::Transform::scaling(2.0, 2.0).inverted().map(|i| i.apply((4.0, 4.0))),
+            );
+            info!(
+                "draw: blit={} refusals={:?}",
+                draw::overlay("a direct overlay line"),
+                draw::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",
