@@ -3,6 +3,13 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
+mod s53;
+mod s54;
+mod s55;
+mod s56;
+mod s57;
+mod s58;
+
 use cinnaloader::prelude::*;
 
 /// Whether a section's demonstration should run: every one of them when nothing is set, or
@@ -4990,6 +4997,27 @@ impl Mod for Hello {
                 fluids::register_render_layer("water", "hello:water_layer"),
                 fluids::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
             );
+        });
+
+        tasks::schedule_after_ticks(100, move || {
+            for line in s53::run() {
+                info!("s53 | {line}");
+            }
+            for line in s54::run() {
+                info!("s54 | {line}");
+            }
+            for line in s55::run() {
+                info!("s55 | {line}");
+            }
+            for line in s56::run() {
+                info!("s56 | {line}");
+            }
+            for line in s57::run() {
+                info!("s57 | {line}");
+            }
+            for line in s58::run() {
+                info!("s58 | {line}");
+            }
         });
 
         // Section 5: what this mod holds, what it does not, and why.

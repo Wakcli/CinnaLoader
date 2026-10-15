@@ -44,6 +44,15 @@ use std::{
     sync::OnceLock,
 };
 
+pub mod breeding;
+pub mod farming;
+pub mod trading;
+pub mod structures;
+pub mod block_entities;
+pub mod serialization;
+pub mod data;
+pub mod persistence;
+pub mod packs;
 pub mod ai;
 pub mod audio;
 pub mod blocks;
