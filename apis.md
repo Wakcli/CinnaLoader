@@ -79,9 +79,9 @@ guide, not a contract.
 | 41 | Particles and visual effects | 32 | done | A real simulation a mod owns: particle types, a pool integrated over time, seeded bursts, `spawn_in_box` that keeps its particles in bounds, emitters with a rate accumulator, and visual-effect declarations; drawing refused |
 | 42 | Networking and connections | 43 | done | A mod's own socket is genuinely opened (`std::net`, bounded reads, length-prefixed framing, real statistics); the client's single game connection is refused with a reason per question |
 | 43 | Packet interception and protocol APIs | 36 | done | A real binary codec (every scalar, varint, strings, byte blocks, over-read refused), real framing, a bidirectional registry and a real dispatch path with a trace; the client's protocol refused |
-| 44 | Custom networking between mods | 26 | todo |
-| 45 | Commands and command registration | 30 | todo |
-| 46 | Chat and messages | 34 | todo |
+| 44 | Custom networking between mods | 27 | done | Real peer-to-peer channels between mods in this process: peers with API versions, channels with a codec and an enforced payload limit, version negotiation, ordered streams, request/response and delivery counted per handler; the client's connection refused |
+| 45 | Commands and command registration | 31 | done | A real tokenizer and argument binder (quoted tokens, typed arguments, named errors), real prefix completion over names, aliases and choices, and a real dispatcher that checks the permission level before running an executor; the client's dispatcher refused |
+| 46 | Chat and messages | 34 | done | Components a mod really builds: text, translations resolved through section 13's table with positional and named substitution, styled spans, click and hover events, a JSON round trip, and a real capped history; the client's chat refused |
 | 47 | Scoreboards, teams, and statistics | 39 | todo |
 | 48 | Enchantments, attributes, and equipment | 28 | todo |
 | 49 | Loot tables and drops | 23 | todo |
@@ -928,6 +928,54 @@ Verified in a run with the mod attached: 23 bytes written and every field read b
 over-read and a truncated frame both refused with their errors, the varint byte lengths above, a
 packet registered with its duplicate refused, `serialize`/`deserialize` round-tripping, a handler
 running on dispatch and on `feed`, the trace counting two entries, and every client call refused.
+
+### 44 — Custom networking between mods
+
+Peers, channels and streams, and the delivery is real: a payload sent to another mod in this
+process is framed, decoded and handed to that mod's registered handler, with the delivery counted.
+A channel declares a codec, a payload limit and a required API version, and all three are enforced
+where a caller would hope — `Err(PayloadTooLarge { size: 65, limit: 64 })` one byte over and
+`Ok(1)` at the limit, `Err(VersionMismatch { required: 2, actual: 1 })` for a peer advertising an
+older API than the channel requires, `Err(UnknownPeer)` for a peer that is not there, and
+`Err(StreamClosed)` after a stream closes having carried messages 1 and 2 in order. Requests are
+real too: a registered responder answered `Ok([7, 7])`. Also `register_codec`,
+`get_payload_limit`/`set_payload_limit`, `get_channel_status` (closed, registered, open),
+`get_peer_api_versions`, `get_peer_capabilities`, `negotiate_version` and the cleanup calls.
+
+Refused with a sentence each: delivering to a player, relaying through the client's server,
+sending into the client's transport, and reading the client's plugin channels.
+
+### 45 — Commands and command registration
+
+A real tokenizer and binder underneath the 31 names. Quoted tokens keep their spaces (a
+`"two words"` argument arrived whole), an unterminated quote is `Err(UnterminatedQuote)`, a
+missing required argument is `Err(MissingArgument("who"))` naming it, and a wrong type is
+`Err(WrongType { argument: "times", wanted: "integer", found: "twelve" })` rather than a silent
+zero. An alias resolves to the same command and runs it, `complete("/hel")` answers every name and
+alias with that prefix, and the tree validates clean. Dispatch really checks the permission level
+*before* fetching an executor: a permission-4 caller runs the command, and a permission-0 caller
+gets `Err(PermissionDenied { command: "hello:greet", needed: … })`. `register_redirect` works
+between two commands that exist and refuses when either does not.
+
+Refused with a sentence each: registering into the client's dispatcher, running a command as the
+client or the server, reading the client's command list, and aliasing a client command.
+
+### 46 — Chat and messages
+
+Components are real data. `create_text` and `create_translation` build them,
+`i18n::register_translations` supplies the table section 13 owns, and a translation really
+resolves and substitutes: `hello.welcome` with `Welcome, {0}!` rendered `Hello Welcome, world!`,
+and a named one rendered `Hello Ada!`. An unknown key renders the key itself and an unmatched
+placeholder stays visible, which is the honest behaviour rather than a silent blank. Styles
+(colour by name and by hex, bold, italic, underlined, strikethrough, obfuscated, insertion) are
+carried on spans and survive `then`, and click and hover events survive into the annotations.
+`format` and `from_json` are a real JSON component round trip. The history is a real capped ring:
+pushing three messages into a capacity of two leaves the last two, with the oldest dropped
+exactly once. Delivery is real in-process: `send_local` reached one handler and `broadcast`
+reached the subscriber, with the text and style intact.
+
+Refused with a sentence each: sending into the client's chat, reading its history or its last
+message, its action bar, title, subtitle and toasts, its formatting, and its message selection.
 
 ## Open: a wild jump on the first frame
 

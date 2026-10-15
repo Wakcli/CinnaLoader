@@ -3961,6 +3961,288 @@ impl Mod for Hello {
             );
         });
 
+        // Section 44: mod-to-mod channels, and the client's connection they cannot cross.
+        tasks::schedule_after_ticks(70, move || {
+            if !demo(44) {
+                return;
+            }
+            let delivered = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let counter = std::sync::Arc::clone(&delivered);
+            let sub = channels::subscribe_for("hello:beta", "hello:telemetry", move |_message| {
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            });
+            info!(
+                "channels: register={} peer={} {} peers={:?} versions={:?}",
+                channels::register(
+                    Channel::new("hello:telemetry")
+                        .codec(NetCodec::Json)
+                        .payload_limit(64)
+                        .require_version(2)
+                ),
+                channels::register_peer(Peer::new("hello:beta", 2)),
+                channels::register_peer(Peer::new("hello:old", 1)),
+                channels::get_peer_mods(),
+                channels::get_peer_api_versions(),
+            );
+            info!(
+                "channels: duplicate={} {} status={:?} available={} limit={:?} codec={} channels={}",
+                channels::register(Channel::new("hello:dup")),
+                channels::register(Channel::new("hello:dup")),
+                channels::get_channel_status("hello:telemetry"),
+                channels::is_available("hello:telemetry"),
+                channels::get_payload_limit("hello:telemetry"),
+                channels::get_codec("hello:telemetry").is_some(),
+                channels::get_all().len(),
+            );
+            info!(
+                "channels: send_ok={:?} delivered={} mismatch={:?} unknown_peer={:?}",
+                channels::send("hello:telemetry", "hello:beta", &[1, 2, 3]),
+                delivered.load(std::sync::atomic::Ordering::Relaxed),
+                channels::send("hello:telemetry", "hello:old", &[1, 2, 3]),
+                channels::send("hello:telemetry", "nothing", &[1, 2, 3]),
+            );
+            info!(
+                "channels: over_limit={:?} at_limit={:?} raised={} broadcast={:?}",
+                channels::send("hello:telemetry", "hello:beta", &[0u8; 65]),
+                channels::send("hello:telemetry", "hello:beta", &[0u8; 64]),
+                channels::set_payload_limit("hello:telemetry", 128),
+                channels::broadcast("hello:telemetry", &[9, 9]),
+            );
+            info!(
+                "channels: negotiate_ok={:?} negotiate_bad={:?}",
+                channels::negotiate_version("hello:telemetry", "hello:beta"),
+                channels::negotiate_version("hello:telemetry", "hello:old"),
+            );
+            let stream = channels::open_stream("hello:telemetry", "hello:beta").ok();
+            info!(
+                "channels: stream={:?} first={:?} second={:?} closed={:?} after_close={:?}",
+                stream,
+                stream.map(|id| channels::send_stream(id, b"one")),
+                stream.map(|id| channels::send_stream(id, b"two")),
+                stream.map(channels::close_stream),
+                stream.map(|id| channels::send_stream(id, b"three")),
+            );
+            let responder = channels::register_request_handler_for(
+                "hello:beta",
+                "hello:telemetry",
+                |_request| vec![7, 7],
+            );
+            info!(
+                "channels: request={:?} response={} capabilities={:?} unsubscribe={}",
+                channels::send_request("hello:telemetry", "hello:beta", &[1]),
+                channels::send_response(0, &[2]),
+                channels::get_peer_capabilities("hello:beta").map(|held| held.len()),
+                channels::unsubscribe(sub),
+            );
+            info!(
+                "channels: client-side: player={} players={} server={} channels={:?} refusals={:?}",
+                channels::send_to_player("someone", "hello:telemetry", &[1]),
+                channels::send_to_players("hello:telemetry", &[1]),
+                channels::send_to_server("hello:telemetry", &[1]),
+                channels::client_channels(),
+                channels::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "channels: cleanup peer={} {} channel={} handler={}",
+                channels::unregister_peer("hello:old"),
+                channels::unregister_peer("hello:beta"),
+                channels::unregister("hello:telemetry"),
+                channels::unregister_request_handler(responder),
+            );
+        });
+
+        // Section 45: a real parser, completer and dispatcher, and the client's dispatcher.
+        tasks::schedule_after_ticks(72, move || {
+            if !demo(45) {
+                return;
+            }
+            info!(
+                "commands: register={} alias={} root={} redirect={}",
+                commands::register(
+                    Command::new("hello:greet", "greet somebody")
+                        .argument(Argument::new("who", ArgumentType::Word))
+                        .argument(Argument::new("times", ArgumentType::Integer).optional())
+                        .permission(1),
+                    |call| Ok(format!(
+                        "greeted {} about {} time(s)",
+                        call.text("who").unwrap_or("nobody"),
+                        call.integer("times").unwrap_or(1)
+                    ))
+                ),
+                commands::register_alias("hi", "hello:greet"),
+                commands::register_root_command(Command::new("hello", "the hello commands")),
+                {
+                    commands::register(Command::new("hello:howdy", "another greeting"), |_| {
+                        Ok("howdy".to_owned())
+                    });
+                    commands::register_redirect("hello:howdy", "hello:greet")
+                },
+            );
+            info!(
+                "commands: aliases={:?} arguments={:?} permission={:?} commands={} tree={}",
+                commands::get_aliases("hello:greet"),
+                commands::get_arguments("hello:greet").map(|held| held.len()),
+                commands::get_permissions("hello:greet"),
+                commands::get_all().len(),
+                commands::get_command_tree().len(),
+            );
+            let ok = commands::execute("hello:greet world 3");
+            info!(
+                "commands: execute={:?} errors={:?}",
+                ok.map(|result| format!("{result:?}")),
+                commands::get_errors(),
+            );
+            info!(
+                "commands: quoted={:?} missing={:?} wrong_type={:?} unterminated={:?}",
+                commands::execute("hello:greet \"two words\" 2").is_ok(),
+                commands::execute("hello:greet"),
+                commands::execute("hello:greet world twelve"),
+                commands::execute("hello:greet \"unterminated"),
+            );
+            info!(
+                "commands: alias_line={:?} denied={:?} as_ok={:?} for_ok={:?}",
+                commands::execute("hi world"),
+                commands::execute_as("hello:greet", 0, "hello:greet world"),
+                commands::execute_as("hello:greet", 2, "hello:greet world"),
+                commands::execute_for(
+                    &commands::CommandSource::new("a sender", 2),
+                    "hello:greet world"
+                ),
+            );
+            info!(
+                "commands: complete={:?} complete_arg={:?} suggest={:?} validate={:?}",
+                commands::complete("hel"),
+                commands::complete("hello:greet "),
+                commands::suggest("hello:greet", "times", "1"),
+                commands::validate_tree(),
+            );
+            info!(
+                "commands: set_permissions={} errors_before={} cleared={} result={} source={:?}",
+                commands::set_permissions("hello:greet", 2),
+                commands::get_errors().len(),
+                commands::clear_errors(),
+                commands::get_result().is_some(),
+                commands::get_source().is_some(),
+            );
+            info!(
+                "commands: client-side: register={} server={} list={} alias={} refusals={:?}",
+                commands::register_client_command(Command::new("hello:client", "x")),
+                commands::register_server_command(Command::new("hello:server", "x")),
+                commands::get_client_commands().len(),
+                commands::alias_client_command("hclip", "hello:client"),
+                commands::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
+        // Section 46: messages a mod builds, and the client's chat it cannot reach.
+        tasks::schedule_after_ticks(74, move || {
+            if !demo(46) {
+                return;
+            }
+            let language = i18n::get_current_language();
+            i18n::register_translations(
+                &language,
+                &[
+                    ("hello.welcome", "Welcome, {0}!"),
+                    ("hello.key", "Hello {name}!"),
+                ],
+            );
+            let mut style = chat::create_style();
+            chat::set_color(&mut style, chat::TextColor::named("gold"));
+            chat::set_bold(&mut style, true);
+            let message = chat::create_text("Hello ")
+                .style(style)
+                .then(chat::create_translation(
+                    "hello.welcome",
+                    &[chat::create_text("world")],
+                ))
+                .click(chat::create_click_event(
+                    chat::ClickAction::RunCommand,
+                    "/hello:greet",
+                ))
+                .hover(chat::create_hover_event(
+                    chat::HoverAction::ShowText,
+                    "a greeting",
+                ));
+            info!(
+                "chat: plain={:?} spans={} annotations={:?}",
+                message.plain_text(),
+                message.spans().len(),
+                message.annotations(),
+            );
+            info!(
+                "chat: unknown_key={:?} named={:?} hex={:?}",
+                chat::create_translation("hello.missing_key", &[]).plain_text(),
+                chat::create_translation_named(
+                    "hello.key",
+                    &[("name", chat::create_text("Ada"))]
+                )
+                .plain_text(),
+                chat::translate("hello.key")
+                    .color(chat::TextColor::hex(0xff8800))
+                    .plain_text(),
+            );
+            let json = chat::format(&message);
+            info!(
+                "chat: json={} round_trip={:?} tree={} copied={:?}",
+                json.len(),
+                chat::Message::from_json(&json).map(|held| held.plain_text()),
+                chat::get_component_tree(&message).len(),
+                chat::copy_message(&message).plain_text(),
+            );
+            let mut history = chat::MessageHistory::new(2);
+            history.push(chat::create_text("first"));
+            history.push(chat::create_text("second"));
+            history.push(chat::create_text("third"));
+            info!(
+                "chat: history len={} capacity={} last={:?} find={} copy={:?}",
+                history.len(),
+                history.capacity(),
+                history.last().map(|held| held.plain_text()),
+                history.find("third").len(),
+                history.copy_message(0).map(|held| held.plain_text()),
+            );
+            info!(
+                "chat: module_history pushed={} len={} message={:?} found={} cleared={}",
+                chat::push_history(&message),
+                chat::get_history().len(),
+                chat::get_message(0).map(|held| held.plain_text()),
+                chat::find_history("Hello").len(),
+                chat::clear_history(),
+            );
+            let delivered = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let counter = std::sync::Arc::clone(&delivered);
+            let handler = chat::register_message_handler("hello:chat", move |_message| {
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            });
+            info!(
+                "chat: registered={handler} local={} broadcast={} delivered={} unregister={} cleared={}",
+                chat::send_local("hello:chat", &message),
+                chat::broadcast(&message),
+                delivered.load(std::sync::atomic::Ordering::Relaxed),
+                chat::unregister_message_handler("hello:chat"),
+                history.clear(),
+            );
+            info!(
+                "chat: client-side: send={} system={} network={} last={:?} action_bar={} title={} subtitle={} toast={}",
+                chat::send_message(&message),
+                chat::send_system_message(&message),
+                chat::send_network("hello:chat", &message),
+                chat::get_last_message(),
+                chat::send_action_bar(&message),
+                chat::send_title(&message),
+                chat::send_subtitle(&message),
+                chat::send_toast(&message),
+            );
+            info!(
+                "chat: client-side: formatter={} {} selected={:?} refusals={:?}",
+                chat::register_formatter("hello:fmt"),
+                chat::unregister_formatter("hello:fmt"),
+                chat::get_selected_message(),
+                chat::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

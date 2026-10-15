@@ -1286,6 +1286,18 @@ pub mod prelude {
         LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
         ResolutionErrorKind, SoftDependency, VersionedDependency,
     };
+    pub use crate::channels::{
+        self as channels, Channel, ChannelError, ChannelStatus, DEFAULT_PAYLOAD_LIMIT,
+        Message as ChannelMessage, Peer, Request as ChannelRequest, Stream, StreamId,
+    };
+    pub use crate::chat::{
+        self as chat, ClickAction, ClickEvent, Content, HoverAction, HoverEvent, Message,
+        MessageHistory, Span, Style, TextColor,
+    };
+    pub use crate::commands::{
+        self as commands, Argument, ArgumentType, ArgumentValue, Command, CommandCall,
+        CommandError, CommandOrigin, CommandResult, CommandSource, ParsedCommand, TreeNode,
+    };
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
         State as DrawState, Transform,

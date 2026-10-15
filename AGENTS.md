@@ -75,13 +75,23 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §43 packet APIs (the batch was §41, §42, §43). Sections 1–43 are done and
-  verified in a run with the mod attached; `apis.md` rows 1–43 say `done` and `checklist.md`
-  agrees. `cargo test` is green (427 tests across the targets, 0 failed) and
+- **Last finished:** §46 chat and messages (the batch was §44, §45, §46). Sections 1–46 are done
+  and verified in a run with the mod attached; `apis.md` rows 1–46 say `done` and `checklist.md`
+  agrees. `cargo test` is green (459 tests across the targets, 0 failed) and
   `cargo clippy --all-targets` is clean.
-- **In progress:** starting §44 custom networking between mods, then §45 onwards.
-- **Next command:** `python3 tools/instructions.py check`, then work `## 44. Custom networking
-  between mods` from the wishlist, reusing the pattern the last twenty sections follow.
+- **In progress:** starting §47 particles-adjacent visual work and onwards — take the next
+  section in order from the wishlist.
+- **Next command:** `python3 tools/instructions.py check`, then the next section from the
+  wishlist, reusing the pattern the last twenty-five sections follow.
+- **A lesson from the §44–§46 batch worth carrying:** the per-section demo is where a wrong
+  *claim* hides. §44's demo registered a bare duplicate `Channel` (which replaces) and so wiped
+  the payload limit and required version it had just declared; §45's demo redirected from a
+  command that did not exist; §46's demo never registered the translation its message referenced.
+  In all three the library was right and the *demo* was wrong — and the fix is provable: after
+  fixing them the log shows `limit=Some(64)`,
+  `Err(PayloadTooLarge { size: 65, limit: 64 })` and
+  `Err(VersionMismatch { required: 2, actual: 1 })` where it previously showed `32768` and `Ok(0)`.
+  Read a demo's log line by line and ask what it *proves*, not whether it printed.
 - **How the last three sections were done, and why it worked:** three parallel lanes, one new
   module file each (`sdk/src/widget.rs`, `sdk/src/camera.rs`, `sdk/src/audio.rs`), with the
   manager owning the four files every section touches (`sdk/src/lib.rs` for the module line and
