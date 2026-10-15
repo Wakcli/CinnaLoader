@@ -13,7 +13,51 @@ struct Hello {
 
 impl Mod for Hello {
     fn load(&mut self) {
-        meta!("Hello mod", env!("CARGO_PKG_VERSION"), "cinnaloader");
+        declare(
+            ModManifest::new("hello-mod", "Hello mod", env!("CARGO_PKG_VERSION"))
+                .description("The worked example: one of every setting kind")
+                .author("cinnaloader")
+                .contributors(&["you"])
+                .credit("the Cinnabar agent docs")
+                .license("MIT")
+                .website("https://github.com/Wakcli/CinnaLoader")
+                .source("https://github.com/Wakcli/CinnaLoader")
+                .tag("example")
+                .tag("settings")
+                .category("Display")
+                .environment(Environment::Client)
+                .capability(Capability::Files)
+                .capability(Capability::PlayerRead)
+                .permission(Permission::WorldState)
+                .build(BuildInfo {
+                    number: option_env!("BUILD_NUMBER").and_then(|number| number.parse().ok()),
+                    git_commit: option_env!("GIT_COMMIT").map(str::to_owned),
+                    timestamp: None,
+                    development: cfg!(debug_assertions),
+                }),
+        );
+        // Asking the loader about itself, which is section 1 of the wishlist.
+        info!(
+            "identity: {} v{} [{}] by {} | state={} enabled={} dev={} | dir={} | ns={}",
+            name(),
+            version(),
+            license().unwrap_or_else(|| "no licence".to_owned()),
+            authors().join(", "),
+            state(),
+            is_enabled(),
+            is_development(),
+            directory()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "unknown".to_owned()),
+            namespace().scope("watermark"),
+        );
+        info!(
+            "manifest v{} | tags {:?} | capabilities {} | loader v{}",
+            manifest_version(),
+            tags(),
+            capabilities().len(),
+            loader_version(),
+        );
         feature("watermark", "Watermark", "Display", ON);
         slider("scale", "Watermark scale", "Display", 1.0, 0.5..=3.0, 0.1);
         choice(

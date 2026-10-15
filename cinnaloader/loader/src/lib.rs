@@ -16,6 +16,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use cinnaloader::modinfo::{ModEntrypoint, ModInfo, ModManifest, State};
 use cinnaloader::HostApi;
 use libloading::{Library, Symbol};
 
@@ -151,6 +152,165 @@ pub fn set_mod_enabled(name: &str, enabled: bool) {
             names.push(name.to_owned());
         }
     }
+}
+
+/// What a mod declared about itself, and where its library came from.
+struct ModRecord {
+    name: String,
+    manifest: ModManifest,
+    library: Option<PathBuf>,
+    /// True while the mod's `load` is running.
+    loading: bool,
+}
+
+static RECORDS: OnceLock<Mutex<Vec<ModRecord>>> = OnceLock::new();
+
+fn records() -> &'static Mutex<Vec<ModRecord>> {
+    RECORDS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// The loader's own version, reported to mods that gate on it.
+const LOADER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Records a mod's manifest, or updates the one held under that name.
+fn remember(name: &str, manifest: ModManifest, library: Option<PathBuf>) {
+    if let Ok(mut records) = records().lock() {
+        match records.iter_mut().find(|record| record.name == name) {
+            Some(record) => {
+                record.manifest = manifest;
+                record.library = library.or_else(|| record.library.clone());
+            }
+            None => records.push(ModRecord {
+                name: name.to_owned(),
+                manifest,
+                library,
+                loading: false,
+            }),
+        }
+    }
+}
+
+/// Marks a mod as loading, so a report asked for during `load` says so.
+fn entering_load(name: &str) {
+    if let Ok(mut records) = records().lock() {
+        match records.iter_mut().find(|record| record.name == name) {
+            Some(record) => record.loading = true,
+            None => records.push(ModRecord {
+                name: name.to_owned(),
+                manifest: ModManifest::new(name, name, "0"),
+                library: None,
+                loading: true,
+            }),
+        }
+    }
+}
+
+fn finished_loading(name: &str) {
+    if let Ok(mut records) = records().lock() {
+        let record = records.iter_mut().find(|record| record.name == name);
+        if let Some(record) = record {
+            record.loading = false;
+        }
+    }
+}
+
+/// The manifest a mod declared, or a bare one when it declared nothing.
+fn declared_manifest(name: &str) -> ModManifest {
+    records()
+        .lock()
+        .ok()
+        .and_then(|records| {
+            records
+                .iter()
+                .find(|record| record.name == name)
+                .map(|record| record.manifest.clone())
+        })
+        .unwrap_or_else(|| ModManifest::new(name, name, "0"))
+}
+
+/// The loader's view of one mod: its declaration plus what only the loader knows.
+fn mod_info(name: &str) -> ModInfo {
+    let held = records().lock().ok().and_then(|records| {
+        records
+            .iter()
+            .find(|record| record.name == name)
+            .map(|record| (record.library.clone(), record.loading))
+    });
+    let (library, loading) = held.unwrap_or((None, false));
+    let enabled = mod_enabled(name);
+    ModInfo {
+        manifest: declared_manifest(name),
+        directory: config_dir().map(|dir| dir.join(name)),
+        mod_name: name.to_owned(),
+        state: if loading {
+            State::Loading
+        } else if enabled {
+            State::Loaded
+        } else {
+            State::Disabled
+        },
+        enabled,
+        reloading: false,
+        library,
+        entrypoint: ModEntrypoint::default(),
+        loader_version: LOADER_VERSION.to_owned(),
+    }
+}
+
+/// The mod's identity: its library name, without the `lib` a shared object carries.
+fn name_of(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "mod".into());
+    let shared = matches!(path.extension().and_then(|ext| ext.to_str()), Some("so" | "dylib"));
+    if shared {
+        stem.strip_prefix("lib").unwrap_or(&stem).to_owned()
+    } else {
+        stem
+    }
+}
+
+unsafe extern "C" fn host_declare(text: *const c_char) -> i32 {
+    let Some(mod_name) = current_mod() else {
+        eprintln!("[cinnaloader] a manifest was declared outside a mod's load");
+        return 0;
+    };
+    let text = unsafe { c_text(text) };
+    if text.len() > cinnaloader::modinfo::MAX_BYTES {
+        eprintln!(
+            "[cinnaloader] {mod_name}: manifest is {} bytes, over the {}-byte limit",
+            text.len(),
+            cinnaloader::modinfo::MAX_BYTES
+        );
+        return 0;
+    }
+    let manifest = ModManifest::decode(&text);
+    let authors = if manifest.authors.is_empty() {
+        String::new()
+    } else {
+        format!(", by {}", manifest.authors.join(", "))
+    };
+    let tags = if manifest.tags.is_empty() {
+        String::new()
+    } else {
+        format!(", tags {}", manifest.tags.join(" "))
+    };
+    eprintln!(
+        "[cinnaloader] {mod_name}: {} {} ({}{authors}{tags})",
+        manifest.name,
+        manifest.version,
+        manifest.environment_name(),
+    );
+    remember(&mod_name, manifest, None);
+    1
+}
+
+unsafe extern "C" fn host_report(out: *mut c_char, capacity: usize) -> i32 {
+    let Some(mod_name) = current_mod() else {
+        return 0;
+    };
+    write_text(Some(mod_info(&mod_name).encode()), out, capacity)
 }
 
 /// What kind of control a setting is, and so which panel control draws it.
@@ -322,7 +482,7 @@ fn register(
 }
 
 /// The text of a NUL-terminated argument, or an empty string.
-unsafe fn text(ptr: *const c_char) -> String {
+unsafe fn c_text(ptr: *const c_char) -> String {
     if ptr.is_null() {
         return String::new();
     }
@@ -336,7 +496,7 @@ unsafe extern "C" fn host_feature(
     category: *const c_char,
     default_on: u32,
 ) -> i32 {
-    let (id, label, category) = unsafe { (text(id), text(label), text(category)) };
+    let (id, label, category) = unsafe { (c_text(id), c_text(label), c_text(category)) };
     let code = register(SettingKind::Toggle, &id, &label, &category, Vec::new());
     if code == 1 {
         // A default is not a user change, so it is applied without queueing an event.
@@ -354,7 +514,7 @@ unsafe extern "C" fn host_slider(
     max: f64,
     step: f64,
 ) -> i32 {
-    let (id, label, category) = unsafe { (text(id), text(label), text(category)) };
+    let (id, label, category) = unsafe { (c_text(id), c_text(label), c_text(category)) };
     if !min.is_finite() || !max.is_finite() || min >= max || !step.is_finite() || step <= 0.0 {
         return 0;
     }
@@ -378,7 +538,7 @@ unsafe extern "C" fn host_choice(
     default_index: u32,
 ) -> i32 {
     let (id, label, category, options) =
-        unsafe { (text(id), text(label), text(category), text(options)) };
+        unsafe { (c_text(id), c_text(label), c_text(category), c_text(options)) };
     let options: Vec<String> = options.split('\n').map(str::to_owned).collect();
     if options.is_empty() || options.len() > 8 {
         return 0;
@@ -399,7 +559,7 @@ unsafe extern "C" fn host_keybind(
     default_key: *const c_char,
 ) -> i32 {
     let (id, label, category, key) =
-        unsafe { (text(id), text(label), text(category), text(default_key)) };
+        unsafe { (c_text(id), c_text(label), c_text(category), c_text(default_key)) };
     let code = register(SettingKind::Keybind, &id, &label, &category, Vec::new());
     if code == 1 {
         with_setting(&id, |setting| setting.key = key.clone());
@@ -412,12 +572,12 @@ unsafe extern "C" fn host_button(
     label: *const c_char,
     category: *const c_char,
 ) -> i32 {
-    let (id, label, category) = unsafe { (text(id), text(label), text(category)) };
+    let (id, label, category) = unsafe { (c_text(id), c_text(label), c_text(category)) };
     register(SettingKind::Button, &id, &label, &category, Vec::new())
 }
 
 unsafe extern "C" fn host_enabled(id: *const c_char) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     settings_registry()
         .lock()
         .ok()
@@ -431,7 +591,7 @@ unsafe extern "C" fn host_enabled(id: *const c_char) -> i32 {
 }
 
 unsafe extern "C" fn host_number(id: *const c_char, value: f64) -> f64 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     let Ok(mut settings) = settings_registry().lock() else {
         return 0.0;
     };
@@ -445,7 +605,7 @@ unsafe extern "C" fn host_number(id: *const c_char, value: f64) -> f64 {
 }
 
 unsafe extern "C" fn host_set_number(id: *const c_char, value: f64) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     if !value.is_finite() || set_setting_value(&id, value.to_string()).is_none() {
         return 0;
     }
@@ -453,7 +613,7 @@ unsafe extern "C" fn host_set_number(id: *const c_char, value: f64) -> i32 {
 }
 
 unsafe extern "C" fn host_choice_index(id: *const c_char) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     settings_registry()
         .lock()
         .ok()
@@ -467,7 +627,7 @@ unsafe extern "C" fn host_choice_index(id: *const c_char) -> i32 {
 }
 
 unsafe extern "C" fn host_key_name(id: *const c_char, out: *mut c_char, capacity: usize) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     write_text(
         settings_registry()
             .lock()
@@ -484,7 +644,7 @@ unsafe extern "C" fn host_key_name(id: *const c_char, out: *mut c_char, capacity
 }
 
 unsafe extern "C" fn host_set_enabled(id: *const c_char, on: u32) -> i32 {
-    let id = unsafe { text(id) };
+    let id = unsafe { c_text(id) };
     set_feature_enabled(&id, on != 0);
     1
 }
@@ -505,7 +665,7 @@ unsafe extern "C" fn host_take_event(out: *mut c_char, capacity: usize) -> i32 {
 }
 
 unsafe extern "C" fn host_config(key: *const c_char, out: *mut c_char, capacity: usize) -> i32 {
-    let key = unsafe { text(key) };
+    let key = unsafe { c_text(key) };
     let Some(mod_name) = current_mod() else {
         return 0;
     };
@@ -518,7 +678,7 @@ unsafe extern "C" fn host_config(key: *const c_char, out: *mut c_char, capacity:
 }
 
 unsafe extern "C" fn host_set_config(key: *const c_char, value: *const c_char) -> i32 {
-    let (key, value) = unsafe { (text(key), text(value)) };
+    let (key, value) = unsafe { (c_text(key), c_text(value)) };
     let Some(mod_name) = current_mod() else {
         return 0;
     };
@@ -535,12 +695,6 @@ unsafe extern "C" fn host_set_config(key: *const c_char, value: *const c_char) -
     1
 }
 
-unsafe extern "C" fn host_meta(name: *const c_char, version: *const c_char, authors: *const c_char) {
-    let (name, version, authors) = unsafe { (text(name), text(version), text(authors)) };
-    if let Some(mod_name) = current_mod() {
-        eprintln!("[cinnaloader] {mod_name}: {name} {version} by {authors}");
-    }
-}
 
 /// Writes `value` into a caller buffer, returning 1 when it fit and 0 otherwise.
 fn write_text(value: Option<String>, out: *mut c_char, capacity: usize) -> i32 {
@@ -820,10 +974,7 @@ impl Host {
     }
 
     fn load_one(&mut self, path: &Path) -> Result<String> {
-        let name = path
-            .file_stem()
-            .map(|stem| stem.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "mod".into());
+        let name = name_of(path);
         // SAFETY: loading arbitrary native code is the point of a mod loader; the
         // directory is user-controlled.
         let library =
@@ -861,12 +1012,16 @@ impl Host {
             take_event: Some(host_take_event),
             config: Some(host_config),
             set_config: Some(host_set_config),
-            meta: Some(host_meta),
+            declare: Some(host_declare),
+            report: Some(host_report),
         });
+        remember(&name, ModManifest::new(&name, &name, "0"), Some(path.to_owned()));
+        entering_load(&name);
         enter_mod(&name);
         // SAFETY: the table outlives every mod call; every callback is `'static`.
         let code = unsafe { init(api.as_ref() as *const HostApi) };
         leave_mod();
+        finished_loading(&name);
         if code != 0 {
             bail!("mod init failed with code {code}");
         }
@@ -1005,6 +1160,50 @@ mod tests {
         assert_eq!(unsafe { host_number(id.as_ptr(), f64::NAN) }, 10.0, "clamped to max");
         set_setting_value(&scoped, "-5".to_owned());
         assert_eq!(unsafe { host_number(id.as_ptr(), f64::NAN) }, 0.0, "clamped to min");
+    }
+
+    #[test]
+    fn a_declared_manifest_comes_back_with_the_loaders_facts() {
+        let _serial = serial();
+        let name = format!("cinnaloader-manifest-{}", std::process::id());
+        entering_load(&name);
+        enter_mod(&name);
+        let text = CString::new(
+            "v=1\nid=demo\nname=Demo\nversion=2.1.0\nauthor=me\ntag=test\nlicense=MIT\n",
+        )
+        .unwrap();
+        assert_eq!(unsafe { host_declare(text.as_ptr()) }, 1);
+        let mut buffer = [0 as c_char; cinnaloader::modinfo::MAX_BYTES * 2];
+        assert_eq!(unsafe { host_report(buffer.as_mut_ptr(), buffer.len()) }, 1);
+        leave_mod();
+        finished_loading(&name);
+
+        // SAFETY: the loader wrote a NUL-terminated report.
+        let info = ModInfo::decode(unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_str().unwrap());
+        assert_eq!(info.manifest.name, "Demo");
+        assert_eq!(info.manifest.version.major(), Some(2));
+        assert_eq!(info.manifest.authors, vec!["me".to_owned()]);
+        assert_eq!(info.manifest.license.as_deref(), Some("MIT"));
+        assert_eq!(info.mod_name, name, "the loader keeps its own identity for the mod");
+        assert_eq!(info.state, State::Loading, "asked during load");
+        assert_eq!(info.loader_version, LOADER_VERSION);
+
+        set_mod_enabled(&name, false);
+        enter_mod(&name);
+        assert_eq!(unsafe { host_report(buffer.as_mut_ptr(), buffer.len()) }, 1);
+        leave_mod();
+        // SAFETY: the loader wrote a NUL-terminated report.
+        let info = ModInfo::decode(unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_str().unwrap());
+        assert_eq!(info.state, State::Disabled);
+        assert!(!info.enabled);
+        set_mod_enabled(&name, true);
+    }
+
+    #[test]
+    fn a_mod_identity_drops_the_lib_prefix() {
+        assert_eq!(name_of(Path::new("/mods/libhello_mod.so")), "hello_mod");
+        assert_eq!(name_of(Path::new("/mods/hello.dylib")), "hello");
+        assert_eq!(name_of(Path::new("/mods/hello.dll")), "hello");
     }
 
     #[test]

@@ -44,9 +44,12 @@ use std::{
     sync::OnceLock,
 };
 
+pub mod metadata;
+pub mod modinfo;
+
 /// Bumped whenever `HostApi` or any entry-point signature changes. A mod whose
 /// [`Mod`] crate declared a different value is refused at load.
-pub const ABI_VERSION: u32 = 5;
+pub const ABI_VERSION: u32 = 6;
 
 /// Readable spelling for a toggle's `default`.
 pub const ON: bool = true;
@@ -141,10 +144,10 @@ pub struct HostApi {
         Option<unsafe extern "C" fn(key: *const c_char, out: *mut c_char, capacity: usize) -> i32>,
     /// Stores a mod-private config value.
     pub set_config: Option<unsafe extern "C" fn(key: *const c_char, value: *const c_char) -> i32>,
-    /// Reports the mod's name, version and authors.
-    pub meta: Option<
-        unsafe extern "C" fn(name: *const c_char, version: *const c_char, authors: *const c_char),
-    >,
+    /// Declares this mod's manifest, one `key=value` per line. Returns 1 when accepted.
+    pub declare: Option<unsafe extern "C" fn(text: *const c_char) -> i32>,
+    /// Writes the loader's view of this mod, one `key=value` per line.
+    pub report: Option<unsafe extern "C" fn(out: *mut c_char, capacity: usize) -> i32>,
 }
 
 /// A rate the loader's tick can drive: `Timer::every(1000)` fires about once a second.
@@ -258,10 +261,8 @@ slot!(
     WRITE_CONFIG,
     unsafe extern "C" fn(*const c_char, *const c_char) -> i32
 );
-slot!(
-    REPORT_META,
-    unsafe extern "C" fn(*const c_char, *const c_char, *const c_char)
-);
+slot!(DECLARE, unsafe extern "C" fn(*const c_char) -> i32);
+slot!(REPORT, unsafe extern "C" fn(*mut c_char, usize) -> i32);
 
 /// Writes one line through the loader, falling back to stderr before `load`.
 pub fn log(level: u32, message: &str) {
@@ -293,7 +294,7 @@ macro_rules! error {
     ($($arg:tt)*) => { $crate::log($crate::level::ERROR, &::std::format!($($arg)*)) };
 }
 
-/// Reports the mod's display name, version and authors; the loader logs them once.
+/// Declares a mod the quick way: a name, a version and an author.
 ///
 /// ```
 /// # use cinnaloader::meta;
@@ -302,24 +303,39 @@ macro_rules! error {
 #[macro_export]
 macro_rules! meta {
     ($name:expr, $version:expr, $authors:expr) => {
-        $crate::report_meta($name, $version, $authors)
+        $crate::metadata::declare(
+            $crate::modinfo::ModManifest::new(env!("CARGO_PKG_NAME"), $name, $version)
+                .author($authors),
+        )
     };
 }
 
-/// [`meta!`]'s implementation.
-pub fn report_meta(name: &str, version: &str, authors: &str) {
-    let Some(report) = REPORT_META.get() else {
-        return;
+/// Hands a declared manifest to the loader. Called by [`metadata::declare`].
+pub(crate) fn install_manifest(manifest: &modinfo::ModManifest) -> bool {
+    let Some(declare) = DECLARE.get() else {
+        return true;
     };
-    let (Ok(name), Ok(version), Ok(authors)) = (
-        CString::new(name),
-        CString::new(version),
-        CString::new(authors),
-    ) else {
-        return;
+    let Ok(text) = CString::new(manifest.encode()) else {
+        return false;
     };
-    // SAFETY: every argument is a live NUL-terminated string for the duration of the call.
-    unsafe { report(name.as_ptr(), version.as_ptr(), authors.as_ptr()) };
+    // SAFETY: `declare` is a loader-owned function pointer, and `text` outlives the call.
+    unsafe { declare(text.as_ptr()) > 0 }
+}
+
+/// The loader's view of this mod, or `None` when no loader is present.
+pub(crate) fn read_report() -> Option<String> {
+    let report = REPORT.get()?;
+    let mut buffer = vec![0 as c_char; modinfo::MAX_BYTES * 2];
+    // SAFETY: `report` writes at most `buffer.len()` bytes, NUL-terminated.
+    if unsafe { report(buffer.as_mut_ptr(), buffer.len()) } <= 0 {
+        return None;
+    }
+    // SAFETY: the loader wrote a NUL-terminated report.
+    Some(
+        unsafe { CStr::from_ptr(buffer.as_ptr()) }
+            .to_string_lossy()
+            .into_owned(),
+    )
 }
 
 /// The directory the mods were loaded from, once `load` has run.
@@ -666,7 +682,8 @@ pub unsafe fn install(api: *const HostApi) -> i32 {
     store(&TAKE_EVENT, api.take_event);
     store(&READ_CONFIG, api.config);
     store(&WRITE_CONFIG, api.set_config);
-    store(&REPORT_META, api.meta);
+    store(&DECLARE, api.declare);
+    store(&REPORT, api.report);
     store(&REGISTER_FEATURE, api.feature);
     0
 }
@@ -786,11 +803,24 @@ macro_rules! export_mod {
 
 /// Everything a mod needs: `use cinnaloader::prelude::*;`
 pub mod prelude {
+    pub use crate::metadata::{
+        authors, build_number, build_timestamp, cache_directory, capabilities, category,
+        config_directory, context, contributors, credits, data_directory, declare, description,
+        directory, entrypoint, environment, git_commit, icon, id, instance, is_development,
+        is_enabled, is_reloading, license, loader_version, manifest, manifest_version, metadata,
+        name, namespace, permissions, plugin_directory, resource_directory, source_url, state,
+        tags, version, website,
+    };
+    pub use crate::modinfo::{
+        BuildInfo, Capability, Environment, ModContext, ModDirectory, ModInfo, ModInstance,
+        ModManifest, ModMetadata, ModNamespace, ModVersion, Permission, State,
+    };
     pub use crate::{
         button, choice, choice_index, config, enabled, error, export_mod, feature, info, key,
         keybind, log, meta, mods_dir, number, overlay_line, set_config, set_enabled, set_number,
         slider, toggle_gui, warn, Mod, Timer, OFF, ON,
-    };}
+    };
+}
 
 #[cfg(test)]
 mod tests {
@@ -872,13 +902,14 @@ mod tests {
             take_event: Some(probe_take_event),
             config: None,
             set_config: None,
-            meta: None,
+            declare: None,
+            report: None,
         }
     }
 
     #[test]
     fn abi_version_is_stable() {
-        assert_eq!(ABI_VERSION, 5);
+        assert_eq!(ABI_VERSION, 6);
     }
 
     #[test]
