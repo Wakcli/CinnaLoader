@@ -1465,6 +1465,58 @@ pub use crate::patches::{
 pub use crate::datadriven::{
     self as datadriven, Document, DocumentError, DocumentSchema, Reference, SchemaField, Validation,
 };
+// §77 — manager wires these into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §77 — `pub mod custom_entities;` and `pub mod projectiles;` are already declared (lines 78-79).
+    // §77 — no name here collides with the existing prelude, so no aliases.
+pub use crate::custom_entities::{
+    self as custom_entities, EntityDefinition, EntityInstance, Hitbox, ModelRef,
+};
+    pub use crate::projectiles::{
+    self as projectiles, CollisionBehavior, HitTarget, Impact, ImpactBehavior, Projectile,
+    ProjectileType,
+};
+// §78 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §78 — `pub mod builders;` is already declared (sdk/src/lib.rs:80) and s78 is already
+    // §78 — wired into examples/hello-mod/src/lib.rs (tick 108), so only the export is new.
+    // §78 — `BuildError` is already the name of builders_ui's (§79) error type, so this
+    // §78 — module's error is exported as `BuilderError` to keep one name per concept.
+pub use crate::builders::{
+    self as builders, BlockBuilder, BuildError as BuilderError, BuildErrorKind, EntityBuilder,
+    ItemBuilder,
+};
+// §79 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §79 — `pub mod builders_ui;` is already declared (sdk/src/lib.rs:81) and s79 is already
+    // §79 — called from examples/hello-mod/src/lib.rs:5121 (tick 108), so only the export is new.
+    // §79 — `BuildError` is free at the prelude root: §78 exports its own as `BuilderError`
+    // §79 — (BuildError as BuilderError), so this module's error keeps the bare name.
+    // §79 — free functions are reached as `builders_ui::why_unknown`, `builders_ui::refusals`,
+    // §79 — `builders_ui::get_handlers`, `builders_ui::clear_handlers` via the module alias.
+pub use crate::builders_ui::{
+    self as builders_ui, BuildError, ScreenBuilder, DEFAULT_SIZE, DEFAULT_THEME, MAX_SIZE,
+    MIN_SIZE,
+};
+// §80 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §80 — `Kind` and `Migration` are already taken by serialization in the prelude, so `Kind`
+    // §80 — is aliased; `Error` is aliased to match the `SerializeError` convention.
+    // §80 — `pub mod migration;` is already declared (sdk/src/lib.rs:82). No other collisions:
+    // §80 — Action/Change/Run/Step/Status/Support are free names.
+    // §80 — the 22 wishlist names are reached as `migration::run`, `migration::register_config_migration`, etc.
+pub use crate::migration::{
+    self as migration, Action, Change as MigrationChange, Error as MigrationError, Kind as MigrationKind, Run, Status,
+    Step, Support,
+};
+// §81 — manager wires this into the `pub mod prelude { ... }` block in sdk/src/lib.rs.
+    // §81 — `pub mod errors;` is already declared (lib.rs:83). The 19 wishlist names are reached
+    // §81 — as `errors::create`, `errors::wrap`, .…, `errors::export_report`.
+    // §81 — COLLISION: a bare `RetryPolicy` is already in the prelude from `crate::network`
+    // §81 — (lib.rs:1527). Do NOT re-export `errors::RetryPolicy` unaliased; alias it.
+    // §81 — A bare `Error` is avoided too (serialization::Error is already `SerializeError`).
+    pub use crate::errors::{
+        self as errors, Backoff, Cause, ErrorReport, Recovery, RecoveryStatus, RecoveryStrategy,
+    };
+pub use crate::crash::{
+        self as crash, Crash, Group, Report as CrashReport, Snapshot,
+    };
     pub use crate::draw::{
         self as draw, BlendMode, Color, CullMode, DrawCommand, DrawList, IconKind,
         State as DrawState, Transform,
