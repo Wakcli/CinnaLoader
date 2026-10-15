@@ -13,6 +13,24 @@ Session notes live **outside** the repo, at `/home/wak/Cinna/cinnaloader-notes/S
 That split is deliberate: the repo gets the change and its tests, the notes get everything
 else (findings, dead ends, open items).
 
+## Goal
+
+Use `minecraft_mod_loader_api_wishlist.md` as the global API roadmap for the project. Your
+goal is to build a complete, production-quality Minecraft mod loader that implements as
+much of the wishlist as possible, with a strong focus on API coverage, extensibility,
+performance, stability, and developer experience.
+
+Treat the document as the long-term target for the entire project, not a task to complete
+in one pass. Inspect the existing codebase, identify what is already implemented, and
+progressively implement the missing systems in a sensible order. Keep the architecture
+clean, APIs consistent, and features genuinely functional rather than creating empty stubs
+or placeholder implementations.
+
+Preserve existing working functionality, add tests, update documentation, and keep track of
+completed, partial, and missing APIs. Make decisions independently where reasonable,
+prioritise foundational systems before dependent features, and continuously work towards
+implementing the fullest practical version of the wishlist.
+
 ## Working agreement
 
 1. **Work `apis.md` top to bottom, one item at a time.** It is a queue, not a wish list.

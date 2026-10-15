@@ -3,6 +3,12 @@
 The work queue, generated from `minecraft_mod_loader_api_wishlist.md` (107 sections,
 ~3300 named functions). **That file is the specification; this file is the status.**
 
+> **Goal.** Treat the wishlist as the global API roadmap for the whole project: build a
+> complete, production-quality mod loader implementing as much of it as possible, prioritising
+> foundational systems before dependent ones, keeping APIs consistent and features genuinely
+> functional rather than stubs. Work it progressively, keep this file's status honest, and
+> preserve what already works. The full statement is in `AGENTS.md`.
+
 ## How a section is closed
 
 1. Read the section in the wishlist and decide, per function, which of these it is:
