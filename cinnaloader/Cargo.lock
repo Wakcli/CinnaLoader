@@ -648,6 +648,7 @@ dependencies = [
 name = "cinnaloader-preload"
 version = "0.1.0"
 dependencies = [
+ "cinnaloader",
  "cinnaloader-loader",
  "cinnaloader-native",
  "ctor",

@@ -24,6 +24,8 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use crate::version::{VersionRange, VersionReq};
+
 /// The wire format the SDK and the loader agree on for a manifest.
 pub const FORMAT: u32 = 1;
 /// Longest manifest the loader accepts, in bytes.
@@ -148,9 +150,16 @@ pub enum Capability {
     WorldWrite,
 }
 
+impl fmt::Display for Capability {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 impl Capability {
+    /// The name the wire format and the capability system use.
     #[must_use]
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Files => "files",
             Self::Network => "network",
@@ -194,9 +203,16 @@ pub enum Permission {
     Input,
 }
 
+impl fmt::Display for Permission {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 impl Permission {
+    /// The name the wire format uses.
     #[must_use]
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::ReadFiles => "read_files",
             Self::WriteFiles => "write_files",
@@ -225,8 +241,9 @@ impl FromStr for Permission {
     }
 }
 
-/// A version, compared the way a mod author expects: `1.2` < `1.2.1` < `1.10`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A version, compared the way a mod author expects: `1.2` == `1.2.0`, `1.2` < `1.2.1`, and
+/// `1.2.1` < `1.10`. Equality is numeric, so the same version written two ways matches.
+#[derive(Debug, Clone)]
 pub struct ModVersion {
     raw: String,
     parts: Vec<u64>,
@@ -286,7 +303,9 @@ impl ModVersion {
         self.cmp_parts(other) != std::cmp::Ordering::Less
     }
 
-    fn cmp_parts(&self, other: &Self) -> std::cmp::Ordering {
+    /// The numeric comparison two versions are ordered and equated by.
+    #[must_use]
+    pub fn cmp_parts(&self, other: &Self) -> std::cmp::Ordering {
         use std::cmp::Ordering;
         for index in 0..self.parts.len().max(other.parts.len()) {
             let left = self.parts.get(index).copied().unwrap_or(0);
@@ -311,9 +330,23 @@ impl fmt::Display for ModVersion {
     }
 }
 
+impl PartialEq for ModVersion {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp_parts(other) == std::cmp::Ordering::Equal
+    }
+}
+
+impl Eq for ModVersion {}
+
 impl PartialOrd for ModVersion {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp_parts(other))
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ModVersion {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.cmp_parts(other)
     }
 }
 
@@ -472,6 +505,20 @@ pub struct ModManifest {
     pub capabilities: Vec<Capability>,
     pub permissions: Vec<Permission>,
     pub build: BuildInfo,
+    /// Loader versions this mod accepts.
+    pub requires_loader: VersionReq,
+    /// The lowest ABI version this mod needs.
+    pub requires_api: u32,
+    /// Game versions this mod accepts.
+    pub requires_game: VersionReq,
+    /// The game versions this mod was tried against, for a report.
+    pub supported_game: VersionRange,
+    /// A platform this mod needs, when it only runs on one.
+    pub requires_platform: Option<String>,
+    /// Capabilities or features the mod cannot run without.
+    pub required_features: Vec<String>,
+    /// Capabilities or features the mod can live without.
+    pub optional_features: Vec<String>,
 }
 
 impl ModManifest {
@@ -501,7 +548,66 @@ impl ModManifest {
                 development: cfg!(debug_assertions),
                 ..BuildInfo::default()
             },
+            requires_loader: VersionReq::default(),
+            requires_api: 0,
+            requires_game: VersionReq::default(),
+            supported_game: VersionRange::default(),
+            requires_platform: None,
+            required_features: Vec::new(),
+            optional_features: Vec::new(),
         }
+    }
+
+    /// The loader versions this mod accepts, as `>=0.1, <1`.
+    #[must_use]
+    pub fn requires_loader(mut self, requirement: &str) -> Self {
+        self.requires_loader = VersionReq::parse(requirement).unwrap_or_default();
+        self
+    }
+
+    /// The lowest ABI version this mod needs.
+    #[must_use]
+    pub fn requires_api(mut self, api: u32) -> Self {
+        self.requires_api = api;
+        self
+    }
+
+    /// The game versions this mod accepts, as `>=1.26, <1.27`.
+    #[must_use]
+    pub fn requires_game(mut self, requirement: &str) -> Self {
+        self.requires_game = VersionReq::parse(requirement).unwrap_or_default();
+        self
+    }
+
+    /// The game versions this mod was tried against, as a range.
+    #[must_use]
+    pub fn supports_game(mut self, minimum: &str, maximum: &str) -> Self {
+        self.supported_game = VersionRange::new(
+            Some(ModVersion::parse(minimum)),
+            Some(ModVersion::parse(maximum)),
+        );
+        self
+    }
+
+    /// Only run on `platform`, as `std::env::consts::OS` spells it.
+    #[must_use]
+    pub fn requires_platform(mut self, platform: &str) -> Self {
+        self.requires_platform = Some(platform.to_owned());
+        self
+    }
+
+    /// A capability or feature the mod cannot run without.
+    #[must_use]
+    pub fn requires_feature(mut self, feature: &str) -> Self {
+        self.required_features.push(feature.to_owned());
+        self
+    }
+
+    /// A capability or feature the mod can live without.
+    #[must_use]
+    pub fn optional_feature(mut self, feature: &str) -> Self {
+        self.optional_features.push(feature.to_owned());
+        self
     }
 
     #[must_use]
@@ -654,6 +760,30 @@ impl ModManifest {
             push("build_timestamp", &timestamp.to_string());
         }
         push("dev", u8::from(self.build.development).to_string().as_str());
+        if !self.requires_loader.is_any() {
+            push("requires_loader", &self.requires_loader.to_string());
+        }
+        if self.requires_api > 0 {
+            push("requires_api", &self.requires_api.to_string());
+        }
+        if !self.requires_game.is_any() {
+            push("requires_game", &self.requires_game.to_string());
+        }
+        if let Some(min) = &self.supported_game.min {
+            push("supports_game_min", &min.to_string());
+        }
+        if let Some(max) = &self.supported_game.max {
+            push("supports_game_max", &max.to_string());
+        }
+        if let Some(platform) = &self.requires_platform {
+            push("requires_platform", platform);
+        }
+        for feature in &self.required_features {
+            push("requires_feature", feature);
+        }
+        for feature in &self.optional_features {
+            push("optional_feature", feature);
+        }
         out
     }
 
@@ -700,6 +830,22 @@ impl ModManifest {
                 "git_commit" => manifest.build.git_commit = Some(value),
                 "build_timestamp" => manifest.build.timestamp = text.parse().ok(),
                 "dev" => manifest.build.development = text == "1" || text == "true",
+                "requires_loader" => {
+                    manifest.requires_loader = VersionReq::parse(text).unwrap_or_default();
+                }
+                "requires_api" => manifest.requires_api = text.parse().unwrap_or(0),
+                "requires_game" => {
+                    manifest.requires_game = VersionReq::parse(text).unwrap_or_default();
+                }
+                "supports_game_min" => {
+                    manifest.supported_game.min = Some(ModVersion::parse(text));
+                }
+                "supports_game_max" => {
+                    manifest.supported_game.max = Some(ModVersion::parse(text));
+                }
+                "requires_platform" => manifest.requires_platform = Some(value),
+                "requires_feature" => manifest.required_features.push(value),
+                "optional_feature" => manifest.optional_features.push(value),
                 _ => {}
             }
         }
@@ -855,6 +1001,83 @@ impl ModContext {
     #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.info.enabled
+    }
+}
+
+/// What the host is: the loader, the game, and what the process can provide. A mod reads
+/// this through [`crate::compat`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HostFacts {
+    /// The game version, empty when the loader could not tell.
+    pub game_version: String,
+    /// The client's build, when it reports one.
+    pub game_build: String,
+    /// `bedrock`.
+    pub game_edition: String,
+    /// The platform, as `std::env::consts::OS` spells it.
+    pub game_platform: String,
+    /// The game's protocol number, when it is known.
+    pub game_protocol: Option<u32>,
+    /// The ABI version the loader provides.
+    pub api_version: u32,
+    /// The loader's own version.
+    pub loader_version: String,
+    /// Extra features the loader can provide, beyond [`crate::compat::loader_capabilities`].
+    pub features: Vec<String>,
+}
+
+impl HostFacts {
+    /// The facts as the loader reports them, one `key=value` per line.
+    #[must_use]
+    pub fn encode(&self) -> String {
+        let mut out = String::new();
+        let mut push = |key: &str, value: &str| {
+            out.push_str(key);
+            out.push('=');
+            out.push_str(&escape(value));
+            out.push('\n');
+        };
+        push("host_game_version", &self.game_version);
+        push("host_game_build", &self.game_build);
+        push("host_game_edition", &self.game_edition);
+        push("host_game_platform", &self.game_platform);
+        if let Some(protocol) = self.game_protocol {
+            push("host_game_protocol", &protocol.to_string());
+        }
+        push("host_api_version", &self.api_version.to_string());
+        push("host_loader_version", &self.loader_version);
+        for feature in &self.features {
+            push("host_feature", feature);
+        }
+        out
+    }
+
+    /// Reads what [`Self::encode`] wrote, ignoring everything else in the text.
+    #[must_use]
+    pub fn decode(text: &str) -> Self {
+        let mut facts = Self {
+            game_edition: "bedrock".to_owned(),
+            game_platform: std::env::consts::OS.to_owned(),
+            ..Self::default()
+        };
+        for line in text.lines() {
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            let value = unescape(value);
+            match key {
+                "host_game_version" => facts.game_version = value,
+                "host_game_build" => facts.game_build = value,
+                "host_game_edition" => facts.game_edition = value,
+                "host_game_platform" => facts.game_platform = value,
+                "host_game_protocol" => facts.game_protocol = value.parse().ok(),
+                "host_api_version" => facts.api_version = value.parse().unwrap_or(0),
+                "host_loader_version" => facts.loader_version = value,
+                "host_feature" => facts.features.push(value),
+                _ => {}
+            }
+        }
+        facts
     }
 }
 

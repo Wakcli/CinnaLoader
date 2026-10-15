@@ -24,6 +24,8 @@ fn start() {
     std::env::set_var(ACTIVE_ENV, "1");
     prefer_x11();
 
+    cinnaloader_loader::set_host_facts(host_facts());
+
     let dir = std::env::var(MODS_DIR_ENV)
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("cinnaloader"));
@@ -66,6 +68,68 @@ fn prefer_x11() {
         std::env::remove_var("WAYLAND_DISPLAY");
         eprintln!("[cinnaloader] pinned to X11 so the menu keybind can read the keyboard");
     }
+}
+
+/// What the client is, as far as this process can tell.
+///
+/// The game version is not a symbol the client exposes, so it is read from the Bedrock
+/// samples the client was built against, next to its binary; `CINNALOADER_GAME_VERSION`
+/// overrides it. An empty version means "unknown", which a requirement treats as
+/// uncheckable rather than failed.
+fn host_facts() -> cinnaloader::modinfo::HostFacts {
+    cinnaloader::modinfo::HostFacts {
+        game_version: std::env::var("CINNALOADER_GAME_VERSION")
+            .ok()
+            .filter(|version| !version.is_empty())
+            .unwrap_or_else(detect_game_version),
+        game_build: String::new(),
+        game_edition: "bedrock".to_owned(),
+        game_platform: std::env::consts::OS.to_owned(),
+        game_protocol: None,
+        api_version: cinnaloader::ABI_VERSION,
+        loader_version: env!("CARGO_PKG_VERSION").to_owned(),
+        features: ["files", "player_read", "render", "input"]
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect(),
+    }
+}
+
+/// The Bedrock version the client's own samples name, or empty when they are not there.
+fn detect_game_version() -> String {
+    let Ok(exe) = std::fs::read_link("/proc/self/exe") else {
+        return String::new();
+    };
+    for root in exe.ancestors().skip(1) {
+        let downloads = root.join(".local/assets/downloads");
+        if let Ok(entries) = std::fs::read_dir(&downloads) {
+            for entry in entries.flatten() {
+                if let Some(version) = samples_version(&entry.file_name().to_string_lossy()) {
+                    eprintln!("[cinnaloader] client game version {version} from {}", entry.path().display());
+                    return version;
+                }
+            }
+        }
+        let samples = root.join(".local/assets/bedrock-samples");
+        if let Ok(entries) = std::fs::read_dir(&samples) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let version = name.strip_prefix('v').unwrap_or(&name);
+                if version.starts_with(char::is_numeric) {
+                    eprintln!("[cinnaloader] client game version {version} from {}", entry.path().display());
+                    return version.to_owned();
+                }
+            }
+        }
+    }
+    String::new()
+}
+
+/// `bedrock-samples-v1.26.50.4-full.zip` names version `1.26.50.4`.
+fn samples_version(file_name: &str) -> Option<String> {
+    let rest = file_name.strip_prefix("bedrock-samples-v")?;
+    let version = rest.strip_suffix("-full.zip")?;
+    (!version.is_empty()).then(|| version.to_owned())
 }
 
 /// Only the client binary itself, not the helper processes it spawns.

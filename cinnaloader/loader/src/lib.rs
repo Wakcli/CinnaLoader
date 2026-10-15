@@ -17,7 +17,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use cinnaloader::lifecycle::Phase;
-use cinnaloader::modinfo::{ModEntrypoint, ModInfo, ModManifest, State};
+use cinnaloader::modinfo::{HostFacts, ModEntrypoint, ModInfo, ModManifest, State};
 use cinnaloader::HostApi;
 use libloading::{Library, Symbol};
 
@@ -236,6 +236,36 @@ fn records() -> &'static Mutex<Vec<ModRecord>> {
 /// The loader's own version, reported to mods that gate on it.
 const LOADER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// What this loader can provide, so a mod can ask before offering a feature.
+const LOADER_FEATURES: [&str; 4] = ["files", "player_read", "render", "input"];
+
+/// The game and process facts every mod sees. The preload fills in what it can read from
+/// the client; the rest are derived here.
+static FACTS: OnceLock<HostFacts> = OnceLock::new();
+
+/// Records what the client is. Called once, by the preload, once it has looked around.
+pub fn set_host_facts(facts: HostFacts) {
+    let _ = FACTS.set(facts);
+}
+
+/// The loader, game and process facts.
+#[must_use]
+pub fn host_facts() -> HostFacts {
+    FACTS
+        .get()
+        .cloned()
+        .unwrap_or_else(|| HostFacts {
+            game_version: String::new(),
+            game_build: String::new(),
+            game_edition: "bedrock".to_owned(),
+            game_platform: std::env::consts::OS.to_owned(),
+            game_protocol: None,
+            api_version: cinnaloader::ABI_VERSION,
+            loader_version: LOADER_VERSION.to_owned(),
+            features: LOADER_FEATURES.iter().map(|name| (*name).to_owned()).collect(),
+        })
+}
+
 /// Records a mod's manifest, or updates the one held under that name.
 fn remember(name: &str, manifest: ModManifest, library: Option<PathBuf>) {
     if let Ok(mut records) = records().lock() {
@@ -377,7 +407,9 @@ unsafe extern "C" fn host_report(out: *mut c_char, capacity: usize) -> i32 {
     let Some(mod_name) = current_mod() else {
         return 0;
     };
-    write_text(Some(mod_info(&mod_name).encode()), out, capacity)
+    let mut text = mod_info(&mod_name).encode();
+    text.push_str(&host_facts().encode());
+    write_text(Some(text), out, capacity)
 }
 
 /// What kind of control a setting is, and so which panel control draws it.
@@ -1118,6 +1150,11 @@ impl Host {
         finished_loading(&name);
         if code != 0 {
             bail!("mod init failed with code {code}");
+        }
+        // The mod has declared its manifest by now, so its requirements can be checked.
+        let report = cinnaloader::compat::check(&declared_manifest(&name), &host_facts());
+        if !report.is_compatible() {
+            bail!("incompatible: {}", report.failures().join("; "));
         }
         // The mod has registered its settings by now, so its saved values can apply.
         load_settings(&name);

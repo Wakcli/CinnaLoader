@@ -9,6 +9,7 @@ description = "LD_PRELOAD runtime that starts the loader inside the target proce
 crate-type = ["cdylib"]
 
 [dependencies]
+cinnaloader = { path = "../sdk" }
 cinnaloader-loader = { path = "../loader" }
 cinnaloader-native = { path = "../native" }
 ctor = "0.2"

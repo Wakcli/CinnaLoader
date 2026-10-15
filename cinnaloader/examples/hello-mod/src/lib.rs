@@ -31,6 +31,13 @@ impl Mod for Hello {
                 .capability(Capability::Files)
                 .capability(Capability::PlayerRead)
                 .permission(Permission::WorldState)
+                // Requirements, checked by the loader before this mod is loaded.
+                .requires_api(7)
+                .requires_loader(">=0.1, <1")
+                .requires_game(">=1.26, <1.27")
+                .supports_game("1.26.0", "1.26.99")
+                .requires_platform(std::env::consts::OS)
+                .optional_feature("world_read")
                 .build(BuildInfo {
                     number: option_env!("BUILD_NUMBER").and_then(|number| number.parse().ok()),
                     git_commit: option_env!("GIT_COMMIT").map(str::to_owned),
@@ -54,11 +61,21 @@ impl Mod for Hello {
             namespace().scope("watermark"),
         );
         info!(
-            "manifest v{} | tags {:?} | capabilities {} | loader v{}",
+            "manifest v{} | tags {:?} | capabilities {} | loader v{} | abi {}",
             manifest_version(),
             tags(),
             capabilities().len(),
             loader_version(),
+            compat::api(),
+        );
+        info!(
+            "compat: game {} ({}, {}, protocol {:?}) | supported: {} | optional {:?}",
+            compat::game(),
+            compat::game_edition(),
+            compat::game_platform(),
+            compat::game_protocol(),
+            compat::is_game_version_supported(&VersionReq::parse(">=1.26, <1.27").unwrap()),
+            compat::feature_flags(),
         );
         feature("watermark", "Watermark", "Display", ON);
         slider("scale", "Watermark scale", "Display", 1.0, 0.5..=3.0, 0.1);

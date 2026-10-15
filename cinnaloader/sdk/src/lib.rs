@@ -44,9 +44,11 @@ use std::{
     sync::OnceLock,
 };
 
+pub mod compat;
 pub mod lifecycle;
 pub mod metadata;
 pub mod modinfo;
+pub mod version;
 
 /// Bumped whenever `HostApi` or any entry-point signature changes. A mod whose
 /// [`Mod`] crate declared a different value is refused at load.
@@ -761,10 +763,35 @@ pub trait Mod: Default + Send + 'static {
     fn pressed(&mut self, _id: &str) {}
 }
 
+/// What the host provides, read from the loader's report once.
+static HOST_FACTS: OnceLock<modinfo::HostFacts> = OnceLock::new();
+
+/// The loader, game and process facts. Read once; they do not change while a mod runs.
+#[must_use]
+pub fn host_facts() -> modinfo::HostFacts {
+    HOST_FACTS
+        .get_or_init(|| {
+            let text = read_report().unwrap_or_default();
+            let mut facts = modinfo::HostFacts::decode(&text);
+            if facts.api_version == 0 {
+                facts.api_version = ABI_VERSION;
+            }
+            facts
+        })
+        .clone()
+}
+
+/// The ABI version the loader provides, or the one this SDK was built for.
+#[must_use]
+pub fn hosted_api_version() -> u32 {
+    let api = host_facts().api_version;
+    if api == 0 { ABI_VERSION } else { api }
+}
+
 /// The loader's version, for [`Mod::compatibility`].
 #[must_use]
 pub fn loader_version() -> modinfo::ModVersion {
-    modinfo::ModVersion::parse(&metadata::report().loader_version)
+    modinfo::ModVersion::parse(&host_facts().loader_version)
 }
 
 /// The migration a declaration asked for, waiting for the end of `load`.
@@ -1030,6 +1057,7 @@ pub mod prelude {
         name, namespace, permissions, plugin_directory, resource_directory, source_url, state,
         tags, version, website,
     };
+    pub use crate::compat;
     pub use crate::lifecycle::{
         cancel_pending_hooks, current_phase, defer_until_ready, is_initialized, is_ready,
         previous_version, register_cleanup, register_shutdown_handler, Phase,
@@ -1038,8 +1066,13 @@ pub mod prelude {
         BuildInfo, Capability, Environment, ModContext, ModDirectory, ModInfo, ModInstance,
         ModManifest, ModMetadata, ModNamespace, ModVersion, Permission, State,
     };
+    pub use crate::version::{
+        ApiStability, CompatibilityReport, CompatibilityRule, DeprecationInfo, FeatureAvailability,
+        FeatureFlag, Version, VersionConstraint, VersionMapping, VersionPredicate, VersionRange,
+        VersionReq,
+    };
     pub use crate::{
-        button, choice, choice_index, config, enabled, error, export_mod, feature, info, key,
+        button, choice, choice_index, config, enabled, error, export_mod, feature, hosted_api_version, info, key,
         keybind, log, meta, mods_dir, number, overlay_line, set_config, set_enabled, set_number,
         slider, toggle_gui, warn, Mod, Timer, OFF, ON,
     };
