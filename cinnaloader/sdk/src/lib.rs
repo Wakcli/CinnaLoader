@@ -57,6 +57,7 @@ pub mod entities;
 pub mod events;
 pub mod fs;
 pub mod game;
+pub mod graphics;
 pub mod i18n;
 pub mod inventory;
 pub mod items;
@@ -1286,6 +1287,10 @@ pub mod prelude {
     };
     pub use crate::fs::{self as fs, File, FsError, Metadata as FileMetadata, Watch};
     pub use crate::game::{self as game, Request, RequestOutcome, SessionInfo, Window};
+    pub use crate::graphics::{
+        self as graphics, Ledger, ResourceDesc, ResourceHandle, ResourceKind as GpuResourceKind,
+        BACKENDS,
+    };
     pub use crate::i18n::{self as i18n, Language, NumberStyle};
     pub use crate::inventory::{
         self as inventory, ContainerType, Inventory, InventoryError, SlotKind,
@@ -1323,7 +1328,8 @@ pub mod prelude {
     };
     pub use crate::render::{self as render, Renderer};
     pub use crate::resources::{
-        self as resources, Provider, ResourceDependency, ResourceId, ResourceKind,
+        self as resources, Provider, ResourceDependency, ResourceId,
+        ResourceKind as ResourceMediaKind,
         ResourceLocation, ResourceManager, ResourceMetadata, ResourceOverride, ResourcePack,
         ResourceReloadListener, ResourceStack,
     };

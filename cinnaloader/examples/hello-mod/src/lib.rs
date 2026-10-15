@@ -2397,6 +2397,60 @@ impl Mod for Hello {
             );
         });
 
+        // Section 31: a GPU ledger a mod keeps, and the device it cannot touch.
+        tasks::schedule_after_ticks(44, move || {
+            let vertex = graphics::create_vertex_buffer("hello:vertices", 4096, "vertex");
+            let uniform = graphics::create_uniform_buffer("hello:uniforms", 256, "uniform");
+            let texture = graphics::create_texture("hello:atlas", "rgba8", 32, 32);
+            let _shader = graphics::create_shader("hello:shader", 2048);
+            let _pipeline = graphics::create_render_pipeline("hello:pipeline");
+            let _target = graphics::create_render_target("hello:target", 64, 64);
+            let _depth = graphics::create_depth_buffer("hello:depth", 64, 64);
+            info!(
+                "graphics: ledger count={} bytes={} resources={:?}",
+                graphics::get_resource_count(),
+                graphics::get_memory_usage(),
+                graphics::get_resources()
+                    .into_iter()
+                    .map(|resource| format!("{} {}B", resource.kind, resource.size))
+                    .collect::<Vec<_>>(),
+            );
+            info!(
+                "graphics: vertex={vertex} on_gpu={} texture={:?} released={} count_now={}",
+                graphics::is_created_on_the_gpu(vertex),
+                graphics::get_resource(texture).map(|resource| resource.to_string()),
+                graphics::release_resource(vertex),
+                graphics::get_resource_count(),
+            );
+            graphics::note_validation_error("a render target with no depth buffer");
+            graphics::note_device_lost("the example said so");
+            info!(
+                "graphics: validation={:?} device_lost={:?} backends={:?}",
+                graphics::get_validation_errors(),
+                graphics::get_device_lost_reason(),
+                graphics::BACKENDS,
+            );
+            info!(
+                "graphics: device={:?} adapter={:?} backend={:?} caps={} limits={} submit={}",
+                graphics::get_device(),
+                graphics::get_adapter(),
+                graphics::get_backend(),
+                graphics::get_capabilities().len(),
+                graphics::get_limits().len(),
+                graphics::submit(),
+            );
+            info!(
+                "graphics: read_buffer={:?} write_buffer={} read_texture={:?} write_texture={} resize={} {} refusals={:?}",
+                graphics::read_buffer(uniform).map(|bytes| bytes.len()),
+                graphics::write_buffer(uniform, &[1, 2, 3]),
+                graphics::read_texture(texture).map(|bytes| bytes.len()),
+                graphics::write_texture(texture, &[1, 2, 3]),
+                graphics::resize_texture(texture, 64, 64),
+                graphics::resize_render_target(_target, 128, 128),
+                graphics::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

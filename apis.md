@@ -621,6 +621,27 @@ flush draws the *text* commands there and counts everything else as a draw call 
 issue — `get_draw_calls` reports both. Verified in a live client: a 25-command list flushed
 with 3 drawn and 22 undrawn, and every refusal carrying its reason.
 
+### 31 — GPU and graphics resources
+
+The client owns the GPU device, its adapter, its backend and every object on it, and this host
+has no handle on any of that — so `get_device`, `get_adapter`, `get_backend`,
+`get_capabilities`, `get_limits`, `submit`, `read_buffer`, `write_buffer`, `read_texture`,
+`write_texture`, `resize_texture` and `resize_render_target` are all refused with their own
+reason, and the module is explicit that these APIs are deliberately not tied to one backend
+(`BACKENDS` lists the four names rather than assuming one).
+
+What is real is the ledger a mod keeps: all eighteen `create_*` calls record a description —
+kind, label, bytes, format, dimensions, usage — and answer a handle, and the ledger answers
+`get_resource_count`, `get_memory_usage`, `get_resources` and `get_resource`, plus
+`release_resource`, `note_validation_error`/`get_validation_errors` and
+`note_device_lost`/`get_device_lost_reason`, which are what a mod recorded rather than what the
+client knows. `is_created_on_the_gpu` answers `false` for every handle, because nothing here
+creates anything.
+
+Verified in a live client: seven resources in the ledger totalling 43,264 bytes, a handle
+released with the count dropping from 7 to 6, `on_gpu=false`, the validation error and
+device-lost note read back, and every device call refused.
+
 ## Open: a wild jump on the first frame
 
 A wild jump (rip in no mapping at all) kills the client when a mod does a lot of work inside
