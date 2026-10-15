@@ -34,3 +34,17 @@ cannot host it.
 Check `new-instructions.md` after every push and before starting each API section. Anything
 new goes on the checklist and is followed alongside the roadmap. Never delete an instruction,
 and never process the same one twice.
+
+INST-002: Smart Parallel Agent Usage and Coordination
+
+Make effective use of multiple AI agents to accelerate CinnaLoader development, including writing code, researching Minecraft internals, testing, reviewing, and documentation.
+
+- Use parallel agents when tasks can genuinely be completed independently, including implementing separate API sections or self-contained components.
+- Keep one main agent responsible for architecture, coordination, integration, final verification, commits, and pushes.
+- Give every agent clear, specific instructions, relevant context, defined responsibilities, and explicit completion criteria.
+- Create and maintain good agent instruction files, including "AGENTS.md" and any relevant task-specific instructions. Ensure agents read and follow them rather than treating them as optional documentation.
+- Use agents intelligently and economically. They consume API budget, so do not spawn agents for trivial tasks, simple file edits, work the main agent can handle more efficiently, or unnecessary repeated reviews. Choose the number of agents based on task complexity and expected benefit.
+- Avoid multiple agents editing the same files simultaneously. Use separate branches or worktrees when appropriate, and coordinate dependencies before assigning work.
+- Require implementation agents to build and test their changes and document what they actually implemented. The main agent must review and integrate their work, resolve conflicts, run the required project-wide checks, and verify the final result before committing and pushing.
+- Prioritize correctness, security, maintainability, and genuine progress over maximizing agent count or raw output.
+- Continue the existing API roadmap and process all instructions through the established "new-instructions.md" workflow. Do not duplicate completed instructions or interrupt ongoing work unnecessarily.
