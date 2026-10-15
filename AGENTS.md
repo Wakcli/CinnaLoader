@@ -75,13 +75,20 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §14 game and session state. Sections 1–14 are done and verified in a
-  live client; `apis.md` rows 1–14 say `done` and `checklist.md` agrees.
-- **In progress:** starting §15 world and dimension APIs.
-- **Next command:** `python3 tools/instructions.py check`, then read
-  `## 15. World and dimension APIs` in the wishlist. Expect it to be mostly hooks this host
-  does not have: implement what is observable, and mark the rest in `apis.md` with the
-  reason rather than guessing.
+- **Last finished:** §20 entity components and attributes (commit `b71dbc1`). Sections 1–20
+  are done and verified in a live client; `apis.md` rows 1–20 say `done` and `checklist.md`
+  agrees. A background research agent mapped §15–24 in
+  `../cinnaloader-notes/SECTIONS-15-24.md`, so §21–24 can be worked from that mapping.
+- **In progress:** starting §21 player APIs.
+- **Next command:** `python3 tools/instructions.py check`, then work `## 21. Player APIs`
+  from the mapping: the local player's live state is the client's (refuse with a reason);
+  what a mod owns — player-shaped values, a hotbar selection it tracks — is real.
+- **Pattern the hook-only sections follow, so the next one goes fast:** a real *declaration*
+  registry for what a mod ships (`.family`-style builders, read back by id and by name), a
+  `why_unknown(what)` sentence per kind of client state, `refusals()` listing them, the
+  wishlist's event kinds registered on the §6 bus, and honest `None`/`false`/empty returns
+  for everything that would need a hook. `world.rs`, `blocks.rs`, `items.rs`,
+  `inventory.rs`, `entities.rs` and `components.rs` are the six to copy from.
 - **Blocked (carried forward):** keybinds cannot be exercised headlessly (`device_query`
   needs a focused window) and synthetic clicks do not reach the panel, so those stay
   verified-by-CLI-and-unit-test with the reason recorded in the row.
