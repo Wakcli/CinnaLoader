@@ -19,16 +19,19 @@ Nothing here ever writes to `new-instructions.md`.
 
 import argparse
 import hashlib
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FILE = "new-instructions.md"
-LOG = ROOT / "instruction-log.md"
-CACHE = ROOT / "tools" / ".instructions-cache"
-REFS = ["origin/main", "origin/dev"]
+# The file, the log and the refs are overridable so the reader can be pointed at a fixture
+# without touching the user's file.
+FILE = os.environ.get("INSTRUCTIONS_FILE", "new-instructions.md")
+LOG = Path(os.environ.get("INSTRUCTIONS_LOG", ROOT / "instruction-log.md"))
+REFS = os.environ.get("INSTRUCTIONS_REFS", "origin/main,origin/dev").split(",")
+INCLUDE_LOCAL = os.environ.get("INSTRUCTIONS_INCLUDE_LOCAL", "1") != "0"
 MARKER = "## Instructions"
 
 

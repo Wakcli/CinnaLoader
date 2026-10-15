@@ -75,12 +75,16 @@ If `check` prints `none`, there is nothing new and the roadmap continues where i
 
 ### Where I am
 
-- **Last finished:** §8 logging and diagnostics, commit pending at the time of writing.
-  Sections 1–8 are done; `apis.md` rows 1–8 say `done` and `checklist.md` agrees.
-- **In progress:** starting §9 configuration system.
-- **Next command:** read `## 9. Configuration system` in the wishlist, then extend
-  `cinnaloader/sdk/src` with the config surface the loader already backs (the per-mod `.cfg`
-  files) plus the wishlist's accessors, and verify in a client run.
+- **Last finished:** §10 permissions and sandboxing (commit `a74c5c1`), plus the
+  `new-instructions.md` channel (`tools/instructions.py`, `instruction-log.md`, the loop
+  above). Sections 1–10 are done and verified in a live client; `apis.md` rows 1–10 say
+  `done` and `checklist.md` agrees.
+- **In progress:** starting §11 filesystem and storage.
+- **Next command:** `python3 tools/instructions.py check`, then read
+  `## 11. Filesystem and storage` in the wishlist and implement it in
+  `cinnaloader/sdk/src` over what the loader already gives a mod (its own directory under
+  the mods directory, and the `filesystem_read`/`filesystem_write` capabilities), verifying
+  in a client run.
 - **Blocked (carried forward):** keybinds cannot be exercised headlessly (`device_query`
   needs a focused window) and synthetic clicks do not reach the panel, so those stay
   verified-by-CLI-and-unit-test with the reason recorded in the row.
