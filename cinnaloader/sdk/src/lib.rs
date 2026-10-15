@@ -65,7 +65,9 @@ pub mod metadata;
 pub mod modinfo;
 pub mod mods;
 pub mod permissions;
+pub mod physics;
 pub mod player;
+pub mod raycast;
 pub mod resources;
 pub mod storage;
 pub mod world;
@@ -1284,11 +1286,19 @@ pub mod prelude {
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};
     pub use crate::mods;
+    pub use crate::physics::{
+        self as physics, bounding_box, Body, Ray, RayHit, GRAVITY, TERMINAL_VELOCITY,
+    };
     pub use crate::player::{
         self as player, Effect, GameMode, PlayerPermission, PlayerState, Statistics,
     };
     pub use crate::permissions::{
         self as permissions, AuditEntry, AuditKind, Grant, TrustLevel,
+    };
+    pub use crate::raycast::{
+        self as raycast, from_camera, from_entity as raycast_from_entity, from_position,
+        from_body, EntityBox, RaycastQuery, RaycastResult, Target,
+        CAMERA_REACH, REACH_CREATIVE, REACH_SURVIVAL,
     };
     pub use crate::resources::{
         self as resources, Provider, ResourceDependency, ResourceId, ResourceKind,

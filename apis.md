@@ -58,7 +58,7 @@ guide, not a contract.
 | 20 | Entity components and attributes | 27 | done | Component types and attribute sets a mod owns (fields, validation, serialisation, modifiers applied the game's way); attaching to a live entity refused; the ECS/system names are `n/a` |
 | 21 | Player APIs | 65 | done | A `PlayerState` a mod owns (with an `Inventory` and held item from §17-18); the local player's live state refused; `send_message` writes the log and `send_action_bar` the overlay |
 | 22 | Status effects and damage | 29 | done | Effect types a mod registers and applies to its own player state; damage as a real calculation (armour, resistance, protection, cooldown, modifiers) with types and sources as registries |
-| 23 | Physics and collision | 35 | todo |
+| 23 | Physics and collision | 35 | done | Bedrock's constants published as constants; a `Body` a mod owns (gravity, drag, friction, fall distance, collision box, sweep); the client's own physics step refused, `get_mass`/`set_mass` `n/a` |
 | 24 | Raycasting and interaction | 32 | todo |
 | 25 | Movement and locomotion | 36 | todo |
 | 26 | World generation | 35 | todo |
@@ -436,6 +436,49 @@ and resistance.
 What is out of reach keeps its own reason: applying an effect or damage to a live entity is
 the server's, and `modify_calculation` would need a hook on the client's damage path. The
 thirty-three event kinds this section lists are registered on the §6 bus.
+
+### 23 — Physics and collision
+
+The client's physics step is the hottest code it has and its simulator is out of reach, so
+the live half is refused — `get_velocity`, `get_ground_state`, `get_fluid_state`,
+`get_fall_distance`, `get_collision_box`, `is_colliding`/`is_grounded`/`is_inside_block`/
+`is_inside_fluid`, `check_collision`, `get_movement_result` — and every call that would
+*change* it is refused with its own reason: movement is server-authoritative, `set_no_clip`
+would desync on the next tick, and `modify_gravity`/`modify_friction`/`modify_knockback`/
+`register_collision_handler`/`register_physics_step` would need a hook inside the step.
+
+What is real is more than the section's name suggests. Bedrock's constants are published as
+constants, said to be *the platform's numbers rather than a live read of the client's*:
+gravity `0.08`, vertical drag `0.98`, terminal velocity `3.92`, ground drag `0.6`, friction
+`0.6` and `0.91` for ice, and the eye offset. `Body` is a value a mod owns — position,
+velocity, collision box, ground and fluid state, fall distance, and a `step` that integrates
+gravity and drag the way the game does — with `apply_force`/`apply_impulse`/
+`apply_acceleration`, `land`, `fall_damage` (one per block past three), `is_inside_block`
+against a world the mod supplies, and `sweep`. Verified in a live client: a body fell 50.33
+blocks at the terminal velocity, took 47 damage on landing, and `get_mass` answered `None`
+because Bedrock's client physics has no per-entity mass.
+
+### 24 — Raycasting and interaction
+
+The ray builder the wishlist asks for, over a world the **mod** supplies: `from_position`,
+`from_body`, `from_camera`, `with_direction`, `with_range`, `with_filter`, `with_predicate`,
+`include_passable_blocks`, `include_fluids`, `exclude_entity`, `blocks`/`entities`/`all`, and
+`cast` with a solidity function. The cast itself is a voxel DDA, exact and cheap, shared with
+section 23's `sweep`. `cast_entities` tests the same ray against entity boxes by the slab
+method, and `get_result` answers both.
+
+The result accessors are all real — `get_hit_position`, `get_hit_block`, `get_hit_entity`,
+`get_hit_face`, `get_hit_distance`, `is_clear`, `get_result` — and `interaction::*` is real
+where a mod has the target: the reach numbers are the game's constants (4.5 survival, 5.0
+creative, 12 for a camera pick), `get_target` and `can_interact` work over a mod's own query,
+and `set_reach_distance`, `modify_reach_check`, the six interactions, `register_handler` and
+`cancel_interaction` are refused because interaction is sent by the client on the player's own
+input and accepted by the server.
+
+Verified in a live client: a ray from `(0.5, 0.5, 0.5)` hit the wall at `(3, 0, 0)`, 2.50
+blocks away, face `(-1, 0, 0)`; the entity query found `wisp` with `far` behind it, and with
+`wisp` excluded found `far`; a camera pick had range 12; and a sweep of a body stopped at the
+wall.
 
 ## Open: a wild jump on the first frame
 

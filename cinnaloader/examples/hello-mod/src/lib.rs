@@ -1702,6 +1702,140 @@ impl Mod for Hello {
             );
         });
 
+        // Sections 23 and 24: physics a mod can compute, and a ray against a world it
+        // supplies.
+        tasks::schedule_after_ticks(30, move || {
+            info!(
+                "physics: constants={:?} friction(default)={} friction(ice)={}",
+                physics::constants(),
+                physics::get_friction(None),
+                physics::get_friction(Some("minecraft:ice")),
+            );
+            let mut body = Body::new((0.5, 10.0, 0.5)).with_size(0.6, 1.8);
+            body.on_ground = false;
+            for _ in 0..40 {
+                body.step(1.0);
+            }
+            info!(
+                "physics: body={body} box={:?} eye={:?} fall={:.2} fall_damage={:.0}",
+                body.collision_box(),
+                body.eye_position(),
+                body.fall_distance,
+                body.fall_damage(),
+            );
+            let landed = body.land();
+            body.apply_force(0.1, 0.0, 0.0);
+            body.apply_impulse(0.0, 0.42, 0.0);
+            body.apply_acceleration(0.0, 0.0, 0.1);
+            body.set_collision_shape(0.6, 1.8);
+            info!(
+                "physics: landed={:.2} velocity={:?} ground={} fluid={} inside_block={} mass={:?}",
+                landed,
+                body.velocity,
+                body.ground_state(),
+                body.fluid_state(),
+                body.is_inside_block(|_, y, _| y < 0),
+                physics::get_mass(),
+            );
+            info!(
+                "physics: live: velocity={:?} ground={:?} fluid={:?} fall={:?} box={:?} collide={:?} set={} noclip={} gravity={}",
+                physics::known_only_to_the_client::get_velocity(),
+                physics::known_only_to_the_client::get_ground_state(),
+                physics::known_only_to_the_client::get_fluid_state(),
+                physics::known_only_to_the_client::get_fall_distance(),
+                physics::known_only_to_the_client::get_collision_box(),
+                physics::known_only_to_the_client::is_colliding(),
+                physics::set_velocity(1.0, 2.0, 3.0),
+                physics::set_no_clip(true),
+                physics::modify_gravity("hello:low"),
+            );
+            info!(
+                "raycast: from_position={:?} hit={:?} face={:?} distance={:?} position={:?}",
+                raycast::from_position((0.5, 0.5, 0.5)).ray(),
+                raycast::get_hit_block(
+                    &raycast::from_position((0.5, 0.5, 0.5))
+                        .with_direction((1.0, 0.0, 0.0))
+                        .with_range(10.0)
+                        .cast(|x, _, _| x >= 3)
+                ),
+                raycast::get_hit_face(
+                    &raycast::from_position((0.5, 0.5, 0.5))
+                        .with_direction((1.0, 0.0, 0.0))
+                        .with_range(10.0)
+                        .cast(|x, _, _| x >= 3)
+                ),
+                raycast::get_hit_distance(
+                    &raycast::from_position((0.5, 0.5, 0.5))
+                        .with_direction((1.0, 0.0, 0.0))
+                        .with_range(10.0)
+                        .cast(|x, _, _| x >= 3)
+                ),
+                raycast::get_hit_position(
+                    &raycast::from_position((0.5, 0.5, 0.5))
+                        .with_direction((1.0, 0.0, 0.0))
+                        .with_range(10.0)
+                        .cast(|x, _, _| x >= 3)
+                ),
+            );
+            let query = raycast::from_position((0.5, 0.5, 0.5))
+                .with_direction((1.0, 0.0, 0.0))
+                .with_range(10.0);
+            let entities = vec![
+                raycast::EntityBox::new("wisp", (2.5, 0.5, 0.5), (0.5, 0.5)),
+                raycast::EntityBox::new("far", (9.5, 0.5, 0.5), (0.5, 0.5)),
+            ];
+            let result = raycast::get_result(&query, |x, _, _| x >= 3, &entities);
+            info!(
+                "raycast: result={result} clear={} entity={:?} blocks_only={:?} exclude={:?}",
+                raycast::is_clear(&result),
+                raycast::get_hit_entity(&result).map(|entity| entity.id),
+                query.clone().blocks().cast_entities(&entities).is_none(),
+                query.clone().exclude_entity("wisp").cast_entities(&entities).map(|entity| entity.id),
+            );
+            let camera = raycast::from_camera((0.5, 1.6, 0.5), 0.0, 0.0);
+            let swept = query.clone().sweep(&body, 5.0, |x, _, _| x >= 3);
+            info!(
+                "raycast: camera_range={} camera_direction={:?} sweep={:?}",
+                camera.ray().range,
+                camera.ray().direction,
+                swept.map(|hit| hit.block),
+            );
+            let target = raycast::interaction::get_target(&query, |x, _, _| x >= 3);
+            info!(
+                "interaction: target={target:?} is_some={} can_interact={} reach_creative={} reach_survival={} set_reach={}",
+                target.is_some(),
+                raycast::interaction::can_interact(&target, body.position, raycast::REACH_CREATIVE),
+                raycast::interaction::get_reach_distance("creative"),
+                raycast::interaction::get_reach_distance("survival"),
+                raycast::interaction::set_reach_distance(10.0),
+            );
+            info!(
+                "interaction: interact_block={} interact_entity={} attack={} use_item={} break={} place={} target={:?} handler={} cancel={} modify_reach={}",
+                raycast::interaction::interact_block(3, 0, 0),
+                raycast::interaction::interact_entity("wisp"),
+                raycast::interaction::attack_entity("wisp"),
+                raycast::interaction::use_item(),
+                raycast::interaction::break_block(3, 0, 0),
+                raycast::interaction::place_block(3, 0, 0, "minecraft:stone"),
+                raycast::interaction::get_target(&query, |x, _, _| x >= 3).block.is_some(),
+                raycast::interaction::register_handler("hello:use"),
+                raycast::interaction::cancel_interaction(),
+                raycast::interaction::modify_reach_check("hello:reach"),
+            );
+            info!(
+                "physics/raycast: refusals={:?} {:?} interaction_refusals={:?}",
+                physics::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                raycast::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+                [
+                    raycast::why_unknown("camera"),
+                    raycast::why_unknown("world"),
+                    raycast::why_unknown("entities"),
+                    raycast::why_unknown("interaction"),
+                    raycast::why_unknown("reach"),
+                ],
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",
