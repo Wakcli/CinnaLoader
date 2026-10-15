@@ -16,6 +16,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use cinnaloader::deps::{DependencyResolver, GraphNode};
 use cinnaloader::lifecycle::Phase;
 use cinnaloader::modinfo::{HostFacts, ModEntrypoint, ModInfo, ModManifest, State};
 use cinnaloader::HostApi;
@@ -24,6 +25,8 @@ use libloading::{Library, Symbol};
 type AbiFn = extern "C" fn() -> u32;
 type InitFn = unsafe extern "C" fn(*const HostApi) -> i32;
 type FrameFn = extern "C" fn(u32) -> i32;
+/// `fn(out, capacity) -> i32`, the manifest a mod declares before it is loaded.
+type ManifestFn = unsafe extern "C" fn(*mut c_char, usize) -> i32;
 type PhaseFn = extern "C" fn(u32) -> i32;
 type ShutdownFn = extern "C" fn() -> i32;
 
@@ -158,6 +161,7 @@ pub fn set_mod_enabled(name: &str, enabled: bool) {
 }
 
 /// What a mod declared about itself, and where its library came from.
+#[derive(Clone)]
 struct ModRecord {
     name: String,
     manifest: ModManifest,
@@ -229,12 +233,57 @@ fn mark_failed(name: &str) {
     }
 }
 
+/// Records a mod the loader would not load, so the panel can say why it is not running.
+fn mark_refused(name: &str) {
+    if let Ok(mut names) = failed().lock() {
+        if !names.iter().any(|failed| failed == name) {
+            names.push(name.to_owned());
+        }
+    }
+}
+
 fn records() -> &'static Mutex<Vec<ModRecord>> {
     RECORDS.get_or_init(|| Mutex::new(Vec::new()))
 }
 
 /// The loader's own version, reported to mods that gate on it.
 const LOADER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// What the last resolution decided, for the graph report.
+static ORDER: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static PROBLEMS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static CYCLES: OnceLock<Mutex<Vec<Vec<String>>>> = OnceLock::new();
+
+fn last_order() -> Vec<String> {
+    ORDER.get().and_then(|order| order.lock().ok().map(|order| order.clone())).unwrap_or_default()
+}
+
+fn last_problems() -> Vec<String> {
+    PROBLEMS
+        .get()
+        .and_then(|problems| problems.lock().ok().map(|problems| problems.clone()))
+        .unwrap_or_default()
+}
+
+fn last_cycles() -> Vec<Vec<String>> {
+    CYCLES
+        .get()
+        .and_then(|cycles| cycles.lock().ok().map(|cycles| cycles.clone()))
+        .unwrap_or_default()
+}
+
+/// Records what a resolution decided.
+fn record_resolution(order: Vec<String>, problems: Vec<String>, cycles: Vec<Vec<String>>) {
+    if let Ok(mut slot) = ORDER.get_or_init(|| Mutex::new(Vec::new())).lock() {
+        *slot = order;
+    }
+    if let Ok(mut slot) = PROBLEMS.get_or_init(|| Mutex::new(Vec::new())).lock() {
+        *slot = problems;
+    }
+    if let Ok(mut slot) = CYCLES.get_or_init(|| Mutex::new(Vec::new())).lock() {
+        *slot = cycles;
+    }
+}
 
 /// What this loader can provide, so a mod can ask before offering a feature.
 const LOADER_FEATURES: [&str; 4] = ["files", "player_read", "render", "input"];
@@ -482,6 +531,72 @@ pub struct Event {
     pub kind: &'static str,
     pub id: String,
     pub value: String,
+}
+
+/// The registry and dependency graph as text, for a mod that asks about the others.
+unsafe extern "C" fn host_graph(out: *mut c_char, capacity: usize) -> i32 {
+    let mut text = String::new();
+    let mut held = records().lock().map(|records| records.clone()).unwrap_or_default();
+    held.sort_by(|left, right| left.name.cmp(&right.name));
+    for record in held {
+        let info = mod_info(&record.name);
+        text.push_str(&format!(
+            "mod={}|{}|{}|{}|{}\n",
+            record.name,
+            record.manifest.id,
+            record.manifest.version,
+            info.state,
+            u8::from(info.enabled)
+        ));
+        for dependency in &record.manifest.dependencies {
+            text.push_str(&format!(
+                "depends={}|{}|{}|{}\n",
+                record.name, dependency.id, dependency.requirement, dependency.kind
+            ));
+        }
+        for id in &record.manifest.provides {
+            text.push_str(&format!("provides={}|{id}\n", record.name));
+        }
+    }
+    for (index, name) in last_order().iter().enumerate() {
+        text.push_str(&format!("order={name}|{index}\n"));
+    }
+    for problem in last_problems() {
+        text.push_str(&format!("error={}\n", problem.replace('\n', " ")));
+    }
+    for cycle in last_cycles() {
+        text.push_str(&format!("cycle={}\n", cycle.join(",")));
+    }
+    write_text(Some(text), out, capacity)
+}
+
+/// Verbs a mod may ask the loader to run on another mod.
+const CMD_ENABLE: u32 = 0;
+const CMD_DISABLE: u32 = 1;
+const CMD_IS_ENABLED: u32 = 2;
+const CMD_IS_LOADED: u32 = 3;
+
+unsafe extern "C" fn host_mods_command(verb: u32, id: *const c_char) -> i32 {
+    let id = unsafe { c_text(id) };
+    let loaded = records().lock().map(|records| {
+        records
+            .iter()
+            .any(|record| record.name == id || record.manifest.id == id)
+    });
+    let loaded = loaded.unwrap_or(false);
+    match verb {
+        CMD_ENABLE => {
+            set_mod_enabled(&id, true);
+            1
+        }
+        CMD_DISABLE => {
+            set_mod_enabled(&id, false);
+            1
+        }
+        CMD_IS_ENABLED => i32::from(loaded && mod_enabled(&id)),
+        CMD_IS_LOADED => i32::from(loaded),
+        _ => -1,
+    }
 }
 
 static SETTINGS: OnceLock<Mutex<Vec<Setting>>> = OnceLock::new();
@@ -1027,6 +1142,9 @@ impl Host {
             dir: dir_c,
             mods: Vec::new(),
         };
+        // Nothing of a mod runs before the order is decided, so a dependency is always
+        // loaded ahead of whatever needs it.
+        let mut candidates = Vec::new();
         for entry in std::fs::read_dir(dir)
             .with_context(|| format!("reading mods directory {}", dir.display()))?
         {
@@ -1034,9 +1152,47 @@ impl Host {
             if !is_library(&path) {
                 continue;
             }
-            match host.load_one(&path) {
-                Ok(name) => eprintln!("[cinnaloader] loaded {name} ({})", path.display()),
+            match discover(&path) {
+                Ok(candidate) => candidates.push(candidate),
                 Err(error) => eprintln!("[cinnaloader] skipped {}: {error:#}", path.display()),
+            }
+        }
+        let mut resolver = DependencyResolver::new();
+        for candidate in &candidates {
+            resolver.add(GraphNode::from_manifest(&candidate.name, &candidate.manifest));
+            remember(
+                &candidate.name,
+                candidate.manifest.clone(),
+                Some(candidate.path.clone()),
+            );
+        }
+        let graph = resolver.resolve();
+        record_resolution(
+            graph.order.clone(),
+            graph.errors.iter().map(ToString::to_string).collect(),
+            graph.cycles.iter().map(|cycle| cycle.cycle.clone()).collect(),
+        );
+        for error in &graph.errors {
+            eprintln!("[cinnaloader] {error}");
+        }
+        for cycle in &graph.cycles {
+            eprintln!("[cinnaloader] {cycle}");
+        }
+        let mut refused: Vec<String> = graph.errors.iter().map(|error| error.mod_name.clone()).collect();
+        refused.extend(graph.cycles.iter().flat_map(|cycle| cycle.cycle.clone()));
+        for name in &refused {
+            mark_refused(name);
+        }
+        for name in &graph.order {
+            let Some(candidate) = candidates.iter().find(|entry| &entry.name == name) else {
+                continue;
+            };
+            match host.load_one(&candidate.path) {
+                Ok(name) => eprintln!("[cinnaloader] loaded {name} ({})", candidate.path.display()),
+                Err(error) => {
+                    eprintln!("[cinnaloader] failed {}: {error:#}", candidate.path.display());
+                    mark_refused(&candidate.name);
+                }
             }
         }
         let _ = MOD_NAMES.set(host.mods.iter().map(|module| module.name.clone()).collect());
@@ -1117,31 +1273,17 @@ impl Host {
         let init: Symbol<InitFn> = unsafe { library.get(b"cinnaloader_init\0") }
             .context("not a cinnaloader mod: missing `cinnaloader_init`")?;
         let name_c = CString::new(name.as_str()).context("mod name is not a valid path")?;
-        let api = Box::new(HostApi {
-            abi_version: cinnaloader::ABI_VERSION,
-            log: Some(host_log),
-            mods_dir: self.dir.as_ptr(),
-            overlay_line: Some(host_overlay_line),
-            toggle_gui: Some(host_toggle_gui),
-            mod_name: name_c.as_ptr(),
-            feature: Some(host_feature),
-            slider: Some(host_slider),
-            choice: Some(host_choice),
-            keybind: Some(host_keybind),
-            button: Some(host_button),
-            enabled: Some(host_enabled),
-            set_enabled: Some(host_set_enabled),
-            number: Some(host_number),
-            set_number: Some(host_set_number),
-            choice_index: Some(host_choice_index),
-            key_name: Some(host_key_name),
-            take_event: Some(host_take_event),
-            config: Some(host_config),
-            set_config: Some(host_set_config),
-            declare: Some(host_declare),
-            report: Some(host_report),
-        });
-        remember(&name, ModManifest::new(&name, &name, "0"), Some(path.to_owned()));
+        let api = Box::new(host_api(self.dir.as_ptr(), name_c.as_ptr()));
+        // The discovery pass already recorded what this mod declared, and overwriting that
+        // here would throw the version and dependencies away; only a load that skipped
+        // discovery, as a test does, needs a placeholder.
+        let unknown = records()
+            .lock()
+            .map(|records| !records.iter().any(|record| record.name == name))
+            .unwrap_or(false);
+        if unknown {
+            remember(&name, ModManifest::new(&name, &name, "0"), Some(path.to_owned()));
+        }
         entering_load(&name);
         enter_mod(&name);
         // SAFETY: the table outlives every mod call; every callback is `'static`.
@@ -1191,6 +1333,84 @@ impl Drop for Host {
             }
         }
         let _ = &self.dir;
+    }
+}
+
+/// One mod found in the directory, before any of it has run.
+struct Candidate {
+    name: String,
+    manifest: ModManifest,
+    path: PathBuf,
+}
+
+/// Reads what a library says about itself without running any of it: the ABI it was built
+/// for and the manifest it declared at compile time.
+fn discover(path: &Path) -> Result<Candidate> {
+    let name = name_of(path);
+    // SAFETY: loading arbitrary native code is the point of a mod loader; the directory is
+    // user-controlled.
+    let library =
+        unsafe { Library::new(path) }.with_context(|| format!("opening {}", path.display()))?;
+    let abi: Symbol<AbiFn> = unsafe { library.get(b"cinnaloader_abi_version\0") }
+        .context("not a cinnaloader mod: missing `cinnaloader_abi_version`")?;
+    if abi() != cinnaloader::ABI_VERSION {
+        bail!(
+            "ABI mismatch: mod built for {}, loader is {}",
+            abi(),
+            cinnaloader::ABI_VERSION
+        );
+    }
+    let manifest = match unsafe { library.get::<ManifestFn>(b"cinnaloader_manifest\0") } {
+        Ok(declared) => {
+            let mut buffer = vec![0 as c_char; cinnaloader::modinfo::MAX_BYTES];
+            // SAFETY: the mod writes at most `buffer.len()` bytes, and writes less when its
+            // manifest does not fit.
+            let written = unsafe { declared(buffer.as_mut_ptr(), buffer.len()) };
+            if written <= 0 {
+                ModManifest::new(&name, &name, "0")
+            } else {
+                // SAFETY: the mod NUL-terminated what it wrote.
+                let text = unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_string_lossy();
+                ModManifest::decode(&text)
+            }
+        }
+        Err(_) => ModManifest::new(&name, &name, "0"),
+    };
+    Ok(Candidate {
+        name,
+        manifest,
+        path: path.to_owned(),
+    })
+}
+
+/// The callback table one mod is handed. Every function is `'static`, so the table lives as
+/// long as the mod does.
+fn host_api(dir: *const c_char, name: *const c_char) -> HostApi {
+    HostApi {
+        abi_version: cinnaloader::ABI_VERSION,
+        log: Some(host_log),
+        mods_dir: dir,
+        overlay_line: Some(host_overlay_line),
+        toggle_gui: Some(host_toggle_gui),
+        mod_name: name,
+        feature: Some(host_feature),
+        slider: Some(host_slider),
+        choice: Some(host_choice),
+        keybind: Some(host_keybind),
+        button: Some(host_button),
+        enabled: Some(host_enabled),
+        set_enabled: Some(host_set_enabled),
+        number: Some(host_number),
+        set_number: Some(host_set_number),
+        choice_index: Some(host_choice_index),
+        key_name: Some(host_key_name),
+        take_event: Some(host_take_event),
+        config: Some(host_config),
+        set_config: Some(host_set_config),
+        declare: Some(host_declare),
+        report: Some(host_report),
+        graph: Some(host_graph),
+        mods_command: Some(host_mods_command),
     }
 }
 
@@ -1423,5 +1643,52 @@ mod tests {
         assert!(seen[0].starts_with("key\t"));
         assert!(seen[0].ends_with("\t1"));
         assert!(seen[1].ends_with("\t0"));
+    }
+
+    #[test]
+    fn the_graph_the_loader_writes_is_the_graph_the_sdk_reads() {
+        let _serial = serial();
+        remember(
+            "core_lib",
+            ModManifest::new("core_lib", "Core", "1.2")
+                .provides("core_lib")
+                .depends_on("hello_mod"),
+            None,
+        );
+        remember(
+            "hello_mod",
+            ModManifest::new("hello_mod", "Hello", "0.1")
+                .depends_on_versioned("core_lib", ">=1.0"),
+            None,
+        );
+        record_resolution(
+            vec!["core_lib".to_owned(), "hello_mod".to_owned()],
+            vec!["hello_mod needs missing_lib, which is not installed".to_owned()],
+            vec![vec!["a".to_owned(), "b".to_owned()]],
+        );
+        let dir = CString::new("/tmp").unwrap();
+        let name = CString::new("hello_mod").unwrap();
+        let api = host_api(dir.as_ptr(), name.as_ptr());
+        // SAFETY: the table is alive for the rest of the test and every slot is a real
+        // loader callback.
+        assert_eq!(unsafe { cinnaloader::install(&api) }, 0);
+
+        let registry = cinnaloader::mods::registry();
+        let core = cinnaloader::mods::get_by_id("core_lib").expect("core_lib is installed");
+        assert_eq!(core.version.to_string(), "1.2");
+        assert_eq!(core.name, "core_lib");
+        assert_eq!(registry.order, vec!["core_lib", "hello_mod"]);
+        assert_eq!(
+            cinnaloader::mods::get_dependencies("hello_mod"),
+            vec!["core_lib"]
+        );
+        assert_eq!(
+            cinnaloader::mods::get_dependents("core_lib"),
+            vec!["hello_mod"]
+        );
+        assert!(cinnaloader::mods::get_load_errors()[0].contains("missing_lib"));
+        assert_eq!(registry.cycles.len(), 1);
+        assert!(cinnaloader::mods::explain_load_order()[1].starts_with("hello_mod after"));
+        assert!(!cinnaloader::mods::validate_dependency_graph().is_empty());
     }
 }

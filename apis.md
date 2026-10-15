@@ -36,10 +36,10 @@ guide, not a contract.
 
 | # | Section | Items | Status | Evidence / notes |
 | --- | --- | --- | --- | --- |
-| 1 | Mod metadata and entry points | 37 | todo |
-| 2 | Mod lifecycle | 59 | todo |
-| 3 | Versioning and compatibility | 35 | todo |
-| 4 | Dependencies and mod load order | 46 | todo |
+| 1 | Mod metadata and entry points | 37 | done | ABI v6, `822ea60`. `/tmp/opencode/s1-metadata.png` |
+| 2 | Mod lifecycle | 59 | done | ABI v7, `870fe52`. `/tmp/opencode/s2-lifecycle.png` |
+| 3 | Versioning and compatibility | 35 | done | `95dc61d`. `/tmp/opencode/s3-compat.png`. 4 names have no target, see below |
+| 4 | Dependencies and mod load order | 46 | done | ABI v8. `/tmp/opencode/s4-deps.png` + the run log: order, refusal, errors |
 | 5 | Capability system | 10 | todo |
 | 6 | Event system | 24 | todo |
 | 7 | Threading and task scheduling | 32 | todo |
@@ -143,6 +143,21 @@ guide, not a contract.
 | 105 | Important API design additions | 0 | todo |
 | 106 | Example API layout | 0 | todo |
 | 107 | What to implement first | 0 | todo |
+
+## Section notes
+
+### 3 — Versioning and compatibility
+
+`register_rule`, `register_version_mapping` and `register_compatibility_patch` are `n/a`:
+the loader resolves what every mod declared before any of them loads, so a mod cannot
+inject a rule into that check, and a "patch" would be a no-op on the version it claims to
+fix. Version matching, mapping included, lives in `compat::check`, which both sides call.
+
+### 4 — Dependencies and mod load order
+
+`load_all`, `load`, `reload`, `unload`, `reload_all`, `unload_all` are `n/a` from inside a
+mod: the loader owns loading, there is no hot reload, and a mod asking to unload itself
+mid-call has no meaning here. Everything that *reads* the result is implemented.
 
 ## Already present (ABI v5)
 

@@ -16,24 +16,18 @@ struct Hello {
 impl Mod for Hello {
     fn load(&mut self) {
         declare(
-            ModManifest::new("hello-mod", "Hello mod", env!("CARGO_PKG_VERSION"))
-                .description("The worked example: one of every setting kind")
-                .author("cinnaloader")
+            ModManifest::new("hello_mod", "Hello mod", env!("CARGO_PKG_VERSION"))
                 .contributors(&["you"])
                 .credit("the Cinnabar agent docs")
                 .license("MIT")
                 .website("https://github.com/Wakcli/CinnaLoader")
                 .source("https://github.com/Wakcli/CinnaLoader")
-                .tag("example")
                 .tag("settings")
                 .category("Display")
                 .environment(Environment::Client)
-                .capability(Capability::Files)
                 .capability(Capability::PlayerRead)
-                .permission(Permission::WorldState)
-                // Requirements, checked by the loader before this mod is loaded.
-                .requires_api(7)
-                .requires_loader(">=0.1, <1")
+                // The rest of the manifest was declared at build time, next to the
+                // dependency on core_lib; this call amends it.
                 .requires_game(">=1.26, <1.27")
                 .supports_game("1.26.0", "1.26.99")
                 .requires_platform(std::env::consts::OS)
@@ -44,6 +38,12 @@ impl Mod for Hello {
                     timestamp: None,
                     development: cfg!(debug_assertions),
                 }),
+        );
+        info!(
+            "manifest: declared={} dependencies={:?} tags={:?}",
+            declared().is_some(),
+            manifest().dependencies.iter().map(|d| d.id.clone()).collect::<Vec<_>>(),
+            manifest().tags,
         );
         // Asking the loader about itself, which is section 1 of the wishlist.
         info!(
@@ -100,6 +100,28 @@ impl Mod for Hello {
             set_config("name", "hello-mod");
         }
         info!("hello-mod initialised (mods from {})", mods_dir().unwrap_or("?"));
+        // Section 4: who else is loaded, what needs what, and the order the loader chose.
+        info!(
+            "deps: order={:?} mine={:?} core_loaded={} core_enabled={} dependents={:?}",
+            mods::get_load_order(),
+            mods::get_dependencies("hello_mod"),
+            mods::is_loaded("core_lib"),
+            mods::is_enabled("core_lib"),
+            mods::get_dependents("core_lib"),
+        );
+        info!(
+            "deps: why={:?} missing={:?} errors={:?} cycles={}",
+            mods::explain_load_order(),
+            mods::get_missing_dependencies(),
+            mods::get_load_errors(),
+            mods::find_cycles().len(),
+        );
+        for entry in mods::all() {
+            info!(
+                "deps: {} ({}) v{} {} enabled={} active={}",
+                entry.name, entry.id, entry.version, entry.state, entry.enabled, entry.is_active(),
+            );
+        }
     }
 
     fn tick(&mut self, dt_millis: u32) {
@@ -187,4 +209,14 @@ impl Mod for Hello {
     }
 }
 
-export_mod!(Hello);
+export_mod!(Hello, manifest = ModManifest::new("hello_mod", "Hello mod", env!("CARGO_PKG_VERSION"))
+    .description("The worked example: one of every setting kind")
+    .author("cinnaloader")
+    .tag("example")
+    .capability(Capability::Files)
+    .permission(Permission::WorldState)
+    .depends_on_versioned("core_lib", ">=0.1")
+    .load_after("core_lib")
+    .recommends("missing_lib")
+    .requires_api(8)
+    .requires_loader(">=0.1, <1"));

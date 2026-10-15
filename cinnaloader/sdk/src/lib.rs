@@ -45,14 +45,18 @@ use std::{
 };
 
 pub mod compat;
+pub mod deps;
 pub mod lifecycle;
 pub mod metadata;
 pub mod modinfo;
+pub mod mods;
 pub mod version;
 
 /// Bumped whenever `HostApi` or any entry-point signature changes. A mod whose
 /// [`Mod`] crate declared a different value is refused at load.
-pub const ABI_VERSION: u32 = 7;
+///
+/// 8: the graph and `mods_command` slots, and a manifest declared before load.
+pub const ABI_VERSION: u32 = 8;
 
 /// Readable spelling for a toggle's `default`.
 pub const ON: bool = true;
@@ -151,6 +155,10 @@ pub struct HostApi {
     pub declare: Option<unsafe extern "C" fn(text: *const c_char) -> i32>,
     /// Writes the loader's view of this mod, one `key=value` per line.
     pub report: Option<unsafe extern "C" fn(out: *mut c_char, capacity: usize) -> i32>,
+    /// Writes the registry and dependency graph, one `key=value` per line.
+    pub graph: Option<unsafe extern "C" fn(out: *mut c_char, capacity: usize) -> i32>,
+    /// Runs one command on another mod: 0 enable, 1 disable, 2 is enabled, 3 is loaded.
+    pub mods_command: Option<unsafe extern "C" fn(verb: u32, id: *const c_char) -> i32>,
 }
 
 /// A rate the loader's tick can drive: `Timer::every(1000)` fires about once a second.
@@ -265,6 +273,8 @@ slot!(
     unsafe extern "C" fn(*const c_char, *const c_char) -> i32
 );
 slot!(DECLARE, unsafe extern "C" fn(*const c_char) -> i32);
+slot!(GRAPH, unsafe extern "C" fn(*mut c_char, usize) -> i32);
+slot!(MODS_COMMAND, unsafe extern "C" fn(u32, *const c_char) -> i32);
 slot!(REPORT, unsafe extern "C" fn(*mut c_char, usize) -> i32);
 
 /// Writes one line through the loader, falling back to stderr before `load`.
@@ -323,6 +333,34 @@ pub(crate) fn install_manifest(manifest: &modinfo::ModManifest) -> bool {
     };
     // SAFETY: `declare` is a loader-owned function pointer, and `text` outlives the call.
     unsafe { declare(text.as_ptr()) > 0 }
+}
+
+/// The loader's registry and dependency graph, or `None` when no loader is present.
+pub(crate) fn read_graph() -> Option<String> {
+    read_blob(*GRAPH.get()?, 16 * 1024)
+}
+
+/// The loader's command entry point, for the `mods` module.
+pub(crate) fn mods_command() -> Option<unsafe extern "C" fn(u32, *const c_char) -> i32> {
+    MODS_COMMAND.get().copied()
+}
+
+/// Reads a loader-written blob into a string.
+fn read_blob(
+    read: unsafe extern "C" fn(*mut c_char, usize) -> i32,
+    capacity: usize,
+) -> Option<String> {
+    let mut buffer = vec![0 as c_char; capacity];
+    // SAFETY: `read` writes at most `buffer.len()` bytes, NUL-terminated.
+    if unsafe { read(buffer.as_mut_ptr(), buffer.len()) } <= 0 {
+        return None;
+    }
+    // SAFETY: the loader wrote a NUL-terminated blob.
+    Some(
+        unsafe { CStr::from_ptr(buffer.as_ptr()) }
+            .to_string_lossy()
+            .into_owned(),
+    )
 }
 
 /// The loader's view of this mod, or `None` when no loader is present.
@@ -686,6 +724,8 @@ pub unsafe fn install(api: *const HostApi) -> i32 {
     store(&READ_CONFIG, api.config);
     store(&WRITE_CONFIG, api.set_config);
     store(&DECLARE, api.declare);
+    store(&GRAPH, api.graph);
+    store(&MODS_COMMAND, api.mods_command);
     store(&REPORT, api.report);
     store(&REGISTER_FEATURE, api.feature);
     0
@@ -972,6 +1012,48 @@ pub fn unload_body<T: Mod>(module: &mut T) -> i32 {
 #[macro_export]
 macro_rules! export_mod {
     ($ty:ty) => {
+        $crate::export_mod!($ty, manifest = $crate::modinfo::ModManifest::new(
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION"),
+        ));
+    };
+    ($ty:ty, manifest = $manifest:expr) => {
+        /// The manifest the loader reads *before* this mod is loaded, so it can resolve
+        /// dependencies and decide the load order. This is the same text the mod's
+        /// `manifest()` reports.
+        /// # Safety
+        /// `out` is null or points to `capacity` writable bytes.
+        #[no_mangle]
+        pub unsafe extern "C" fn cinnaloader_manifest(out: *mut i8, capacity: usize) -> i32 {
+            static TEXT: ::std::sync::OnceLock<::std::ffi::CString> =
+                ::std::sync::OnceLock::new();
+            let text = TEXT.get_or_init(|| {
+                let manifest = $manifest;
+                ::std::ffi::CString::new(manifest.encode()).unwrap_or_default()
+            });
+            let bytes = text.as_bytes();
+            if out.is_null() || bytes.len() + 1 > capacity {
+                return 0;
+            }
+            // SAFETY: the caller offered `capacity` writable bytes and the text fits.
+            unsafe {
+                ::std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr(),
+                    out as *mut u8,
+                    bytes.len(),
+                );
+                *out.add(bytes.len()) = 0;
+            }
+            1
+        }
+
+        /// The declared manifest, so `load` can read what the loader already has.
+        #[must_use]
+        #[doc(hidden)]
+        pub fn declared_manifest() -> $crate::modinfo::ModManifest {
+            $manifest
+        }
         static CINNALOADER_MOD: ::std::sync::OnceLock<::std::sync::Mutex<$ty>> =
             ::std::sync::OnceLock::new();
 
@@ -988,6 +1070,7 @@ macro_rules! export_mod {
             if code != 0 {
                 return code;
             }
+            $crate::metadata::adopt($manifest);
             let mut module = <$ty as ::std::default::Default>::default();
             let code = $crate::load_body(&mut module);
             if code != 0 {
@@ -1051,13 +1134,20 @@ macro_rules! export_mod {
 pub mod prelude {
     pub use crate::metadata::{
         authors, build_number, build_timestamp, cache_directory, capabilities, category,
-        config_directory, context, contributors, credits, data_directory, declare, description,
+        config_directory, context, contributors, credits, data_directory, declare, declared,
+        description,
         directory, entrypoint, environment, git_commit, icon, id, instance, is_development,
         is_enabled, is_reloading, license, loader_version, manifest, manifest_version, metadata,
         name, namespace, permissions, plugin_directory, resource_directory, source_url, state,
         tags, version, website,
     };
     pub use crate::compat;
+    pub use crate::deps::{
+        CircularDependencyReport, DependencyGraph, DependencyKind, DependencyResolver,
+        LoadOrderConstraint, ModConflict, ModDependency, ModResolutionError, OptionalDependency,
+        ResolutionErrorKind, SoftDependency, VersionedDependency,
+    };
+    pub use crate::mods;
     pub use crate::lifecycle::{
         cancel_pending_hooks, current_phase, defer_until_ready, is_initialized, is_ready,
         previous_version, register_cleanup, register_shutdown_handler, Phase,
@@ -1160,12 +1250,14 @@ mod tests {
             set_config: None,
             declare: None,
             report: None,
+            graph: None,
+            mods_command: None,
         }
     }
 
     #[test]
     fn abi_version_is_stable() {
-        assert_eq!(ABI_VERSION, 7);
+        assert_eq!(ABI_VERSION, 8);
     }
 
     #[test]

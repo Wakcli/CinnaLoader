@@ -1,0 +1,12 @@
+[package]
+name = "missing-dep-mod"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Example of a mod the loader refuses: it needs something that is not installed"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cinnaloader = { path = "../../sdk" }

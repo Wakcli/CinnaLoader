@@ -24,6 +24,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use crate::deps::{DependencyKind, ModConflict, ModDependency};
 use crate::version::{VersionRange, VersionReq};
 
 /// The wire format the SDK and the loader agree on for a manifest.
@@ -519,6 +520,18 @@ pub struct ModManifest {
     pub required_features: Vec<String>,
     /// Capabilities or features the mod can live without.
     pub optional_features: Vec<String>,
+    /// Mods this one needs, optionally, or would like.
+    pub dependencies: Vec<ModDependency>,
+    /// Ids this mod must be loaded after.
+    pub load_after: Vec<String>,
+    /// Ids this mod must be loaded before.
+    pub load_before: Vec<String>,
+    /// Mods this one will not run beside.
+    pub conflicts: Vec<ModConflict>,
+    /// Ids this mod satisfies, such as a library it embeds.
+    pub provides: Vec<String>,
+    /// Ids this mod stands in for.
+    pub replaces: Vec<String>,
 }
 
 impl ModManifest {
@@ -555,7 +568,108 @@ impl ModManifest {
             requires_platform: None,
             required_features: Vec::new(),
             optional_features: Vec::new(),
+            dependencies: Vec::new(),
+            load_after: Vec::new(),
+            load_before: Vec::new(),
+            conflicts: Vec::new(),
+            provides: Vec::new(),
+            replaces: Vec::new(),
         }
+    }
+
+    /// A mod this one cannot run without.
+    #[must_use]
+    pub fn depends_on(mut self, id: &str) -> Self {
+        self.dependencies.push(ModDependency::new(id));
+        self
+    }
+
+    /// A mod this one needs at a version it names, as `>=1.2`.
+    #[must_use]
+    pub fn depends_on_versioned(mut self, id: &str, requirement: &str) -> Self {
+        self.dependencies
+            .push(ModDependency::new(id).versioned(requirement));
+        self
+    }
+
+    /// A mod this one works without, and would rather not.
+    #[must_use]
+    pub fn depends_on_optional(mut self, id: &str) -> Self {
+        self.dependencies
+            .push(ModDependency::new(id).kind(DependencyKind::Optional));
+        self
+    }
+
+    /// A mod this one would like, and can do without.
+    #[must_use]
+    pub fn recommends(mut self, id: &str) -> Self {
+        self.dependencies
+            .push(ModDependency::new(id).kind(DependencyKind::Recommended));
+        self
+    }
+
+    /// A mod this one mentions, nothing more.
+    #[must_use]
+    pub fn suggests(mut self, id: &str) -> Self {
+        self.dependencies
+            .push(ModDependency::new(id).kind(DependencyKind::Suggested));
+        self
+    }
+
+    /// Load after `id`, without depending on it.
+    #[must_use]
+    pub fn load_after(mut self, id: &str) -> Self {
+        self.load_after.push(id.to_owned());
+        self
+    }
+
+    /// Load before `id`, without depending on it.
+    #[must_use]
+    pub fn load_before(mut self, id: &str) -> Self {
+        self.load_before.push(id.to_owned());
+        self
+    }
+
+    /// Refuse to run beside `id`.
+    #[must_use]
+    pub fn conflicts_with(mut self, id: &str) -> Self {
+        self.conflicts.push(ModConflict::new(id, true));
+        self
+    }
+
+    /// Known to misbehave beside `id`, but not fatal.
+    #[must_use]
+    pub fn breaks_with(mut self, id: &str) -> Self {
+        self.conflicts.push(ModConflict::new(id, false));
+        self
+    }
+
+    /// Satisfies `id`, such as a library this mod ships.
+    #[must_use]
+    pub fn provides(mut self, id: &str) -> Self {
+        self.provides.push(id.to_owned());
+        self
+    }
+
+    /// Stands in for `id`.
+    #[must_use]
+    pub fn replaces(mut self, id: &str) -> Self {
+        self.replaces.push(id.to_owned());
+        self
+    }
+
+    /// Ships `id` inside itself, so a dependency on it is satisfied.
+    #[must_use]
+    pub fn bundles(mut self, id: &str) -> Self {
+        self.provides.push(id.to_owned());
+        self
+    }
+
+    /// Compiles `id` into itself, so a dependency on it is satisfied.
+    #[must_use]
+    pub fn embeds(mut self, id: &str) -> Self {
+        self.provides.push(id.to_owned());
+        self
     }
 
     /// The loader versions this mod accepts, as `>=0.1, <1`.
@@ -605,6 +719,17 @@ impl ModManifest {
 
     /// A capability or feature the mod can live without.
     #[must_use]
+    /// The same as [`ModManifest::requires_mod`]: this mod needs `id` before it.
+    pub fn requires_mod(self, id: &str) -> Self {
+        self.depends_on(id)
+    }
+
+    /// A capability this mod cannot run without, such as `"files"`. The loader checks it
+    /// against what the host supports and refuses the mod when it is missing.
+    pub fn requires_capability(self, capability: &str) -> Self {
+        self.requires_feature(capability)
+    }
+
     pub fn optional_feature(mut self, feature: &str) -> Self {
         self.optional_features.push(feature.to_owned());
         self
@@ -701,6 +826,65 @@ impl ModManifest {
         self.environment.as_str()
     }
 
+    /// Folds a second declaration into this one: what the overlay states wins, and lists
+    /// are joined rather than replaced, so a `load` that adds one dependency keeps
+    /// everything the manifest declared at build time.
+    #[must_use]
+    pub fn amended_with(&self, overlay: &Self) -> Self {
+        fn join<T: PartialEq + Clone>(base: &[T], extra: &[T]) -> Vec<T> {
+            let mut joined = base.to_vec();
+            for item in extra {
+                if !joined.contains(item) {
+                    joined.push(item.clone());
+                }
+            }
+            joined
+        }
+        fn prefer(base: &str, overlay: &str) -> String {
+            if overlay.is_empty() {
+                base.to_owned()
+            } else {
+                overlay.to_owned()
+            }
+        }
+        Self {
+            format: self.format.max(overlay.format),
+            id: overlay.id.clone(),
+            name: prefer(&self.name, &overlay.name),
+            version: overlay.version.clone(),
+            description: prefer(&self.description, &overlay.description),
+            authors: join(&self.authors, &overlay.authors),
+            contributors: join(&self.contributors, &overlay.contributors),
+            website: overlay.website.clone().or_else(|| self.website.clone()),
+            source: overlay.source.clone().or_else(|| self.source.clone()),
+            license: overlay.license.clone().or_else(|| self.license.clone()),
+            icon: overlay.icon.clone().or_else(|| self.icon.clone()),
+            credits: join(&self.credits, &overlay.credits),
+            tags: join(&self.tags, &overlay.tags),
+            category: overlay.category.clone().or_else(|| self.category.clone()),
+            environment: overlay.environment,
+            capabilities: join(&self.capabilities, &overlay.capabilities),
+            permissions: join(&self.permissions, &overlay.permissions),
+            build: overlay.build.clone(),
+            requires_loader: overlay.requires_loader.clone(),
+            requires_api: self.requires_api.max(overlay.requires_api),
+            requires_game: overlay.requires_game.clone(),
+            supported_game: overlay.supported_game.clone(),
+            requires_platform: overlay
+                .requires_platform
+                .clone()
+                .or_else(|| self.requires_platform.clone()),
+            required_features: join(&self.required_features, &overlay.required_features),
+            optional_features: join(&self.optional_features, &overlay.optional_features),
+            dependencies: join(&self.dependencies, &overlay.dependencies),
+            load_after: join(&self.load_after, &overlay.load_after),
+            load_before: join(&self.load_before, &overlay.load_before),
+            conflicts: join(&self.conflicts, &overlay.conflicts),
+            provides: join(&self.provides, &overlay.provides),
+            replaces: join(&self.replaces, &overlay.replaces),
+        }
+    }
+
     /// The manifest as the loader reads it.
     #[must_use]
     pub fn encode(&self) -> String {
@@ -784,6 +968,24 @@ impl ModManifest {
         for feature in &self.optional_features {
             push("optional_feature", feature);
         }
+        for dependency in &self.dependencies {
+            push("depends", &dependency.encode());
+        }
+        for id in &self.load_after {
+            push("load_after", id);
+        }
+        for id in &self.load_before {
+            push("load_before", id);
+        }
+        for conflict in &self.conflicts {
+            push("conflict", &conflict.encode());
+        }
+        for id in &self.provides {
+            push("provides", id);
+        }
+        for id in &self.replaces {
+            push("replaces", id);
+        }
         out
     }
 
@@ -846,6 +1048,20 @@ impl ModManifest {
                 "requires_platform" => manifest.requires_platform = Some(value),
                 "requires_feature" => manifest.required_features.push(value),
                 "optional_feature" => manifest.optional_features.push(value),
+                "depends" => {
+                    if let Some(dependency) = ModDependency::decode(text) {
+                        manifest.dependencies.push(dependency);
+                    }
+                }
+                "load_after" => manifest.load_after.push(value),
+                "load_before" => manifest.load_before.push(value),
+                "conflict" => {
+                    if let Some(conflict) = ModConflict::decode(text) {
+                        manifest.conflicts.push(conflict);
+                    }
+                }
+                "provides" => manifest.provides.push(value),
+                "replaces" => manifest.replaces.push(value),
                 _ => {}
             }
         }

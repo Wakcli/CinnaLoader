@@ -111,11 +111,13 @@ impl fmt::Display for VersionPredicate {
 }
 
 /// A set of predicates. Commas mean "all of", a `|` means "either side".
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+///
+/// Equality compares the predicates, not the spelling, so `*`, `""` and `>=0` are the same
+/// requirement and a round trip through the wire format is equal.
+#[derive(Debug, Clone, Default)]
 pub struct VersionReq {
     /// Each inner vector is one alternative; all of its predicates must hold.
     alternatives: Vec<Vec<VersionPredicate>>,
-    text: String,
 }
 
 /// Why a requirement could not be parsed.
@@ -137,10 +139,7 @@ impl VersionReq {
     pub fn parse(text: &str) -> Result<Self, VersionReqError> {
         let trimmed = text.trim();
         if trimmed.is_empty() || trimmed == "*" {
-            return Ok(Self {
-                alternatives: Vec::new(),
-                text: text.to_owned(),
-            });
+            return Ok(Self::default());
         }
         let mut alternatives = Vec::new();
         for alternative in trimmed.split('|') {
@@ -161,10 +160,7 @@ impl VersionReq {
             }
             alternatives.push(predicates);
         }
-        Ok(Self {
-            alternatives,
-            text: text.to_owned(),
-        })
+        Ok(Self { alternatives })
     }
 
     /// Whether `version` satisfies the requirement. An empty requirement accepts anything.
@@ -189,6 +185,14 @@ impl VersionReq {
         self.alternatives.is_empty()
     }
 }
+
+impl PartialEq for VersionReq {
+    fn eq(&self, other: &Self) -> bool {
+        self.alternatives == other.alternatives
+    }
+}
+
+impl Eq for VersionReq {}
 
 impl fmt::Display for VersionReq {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

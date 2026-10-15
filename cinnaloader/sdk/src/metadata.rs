@@ -7,14 +7,47 @@
 //! caring which side answers.
 
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 use crate::modinfo::{
     Capability, Environment, ModContext, ModDirectory, ModEntrypoint, ModInfo, ModInstance,
     ModManifest, ModMetadata, ModNamespace, ModVersion, Permission, State,
 };
 
-static MANIFEST: OnceLock<ModManifest> = OnceLock::new();
+static MANIFEST: Mutex<Option<ModManifest>> = Mutex::new(None);
+
+fn held_manifest() -> Option<ModManifest> {
+    MANIFEST
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone()
+}
+
+fn set_manifest(manifest: ModManifest) {
+    if let Ok(mut held) = MANIFEST.lock() {
+        *held = Some(manifest);
+    }
+}
+
+/// Takes the manifest the mod declared at build time as the base, so a `load` that only
+/// states what changed does not throw away the rest. Called by [`export_mod!`] before
+/// `load` runs.
+#[doc(hidden)]
+pub fn adopt(manifest: ModManifest) {
+    if let Ok(mut held) = MANIFEST.lock() {
+        let base = held.take();
+        *held = Some(match base {
+            Some(base) => base.amended_with(&manifest),
+            None => manifest,
+        });
+    }
+}
+
+/// What the mod declared at build time, or `None` when it declared nothing there.
+#[must_use]
+pub fn declared() -> Option<ModManifest> {
+    held_manifest()
+}
 
 /// Tells the loader who this mod is. Call it first in [`Mod::load`](crate::Mod::load);
 /// a second call in the same mod is ignored.
@@ -28,22 +61,25 @@ static MANIFEST: OnceLock<ModManifest> = OnceLock::new();
 /// );
 /// ```
 pub fn declare(manifest: ModManifest) -> bool {
+    // What the mod declared at build time is the base; the runtime declaration amends it.
+    let manifest = match held_manifest() {
+        Some(base) => base.amended_with(&manifest),
+        None => manifest,
+    };
     if !crate::install_manifest(&manifest) {
         return false;
     }
     // A version change since the last run means the mod's own data may need moving; the
     // loader is told, and `Mod::migrate` follows `load`.
     crate::note_declaration(&manifest);
-    MANIFEST.set(manifest).is_ok()
+    set_manifest(manifest);
+    true
 }
 
 /// What this mod declared, or an empty manifest if it has not declared yet.
 #[must_use]
 pub fn manifest() -> ModManifest {
-    MANIFEST
-        .get()
-        .cloned()
-        .unwrap_or_else(|| ModManifest::new("mod", "mod", "0"))
+    held_manifest().unwrap_or_else(|| ModManifest::new("mod", "mod", "0"))
 }
 
 /// The loader's view of this mod: the declaration plus what only the loader knows.
