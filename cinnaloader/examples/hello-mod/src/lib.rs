@@ -2846,6 +2846,99 @@ impl Mod for Hello {
             );
         });
 
+        // Section 35: HUD elements a mod owns, and the one way this host can show them.
+        tasks::schedule_after_ticks(52, move || {
+            if !demo(35) {
+                return;
+            }
+            hud::set_screen_size(hud::get_screen_size());
+            info!(
+                "hud: screen={:?} scaled={:?} safe={:?}",
+                hud::get_screen_size(),
+                hud::get_scaled_size(2.0),
+                hud::get_safe_area(8.0),
+            );
+            info!(
+                "hud: layer={} element={} fps={}",
+                hud::register_layer(hud::HudLayer {
+                    id: "hello:info".to_owned(),
+                    owner: "hello_mod".to_owned(),
+                    z_index: 10,
+                    visible: true,
+                }),
+                hud::register_element(
+                    hud::HudElement::new("hello:coords", "0, 64, 0")
+                        .at(4.0, 4.0)
+                        .sized(90.0, 12.0)
+                        .alignment(hud::Alignment::TopLeft)
+                        .layer("hello:info")
+                        .priority(5)
+                ),
+                hud::register_element(
+                    hud::HudElement::new("hello:fps", "60 fps")
+                        .sized(60.0, 12.0)
+                        .alignment(hud::Alignment::BottomRight)
+                        .z(2)
+                ),
+            );
+            info!(
+                "hud: elements={:?} bounds_coords={:?} bounds_fps={:?} anchor={:?} z={:?} priority={:?}",
+                hud::get_elements()
+                    .into_iter()
+                    .map(|element| (element.id, element.layer))
+                    .collect::<Vec<_>>(),
+                hud::get_bounds("hello:coords"),
+                hud::get_bounds("hello:fps"),
+                hud::get_anchor("hello:coords"),
+                hud::get_z_index("hello:fps"),
+                hud::get_priority("hello:coords"),
+            );
+            info!(
+                "hud: set_position={} set_size={} set_alignment={} set_anchor={} set_scale={} set_opacity={} set_z={}",
+                hud::set_position("hello:coords", 8.0, 8.0),
+                hud::set_size("hello:coords", 100.0, 14.0),
+                hud::set_alignment("hello:coords", hud::Alignment::TopLeft),
+                hud::set_anchor("hello:coords", hud::Anchor::TopLeft),
+                hud::set_scale("hello:coords", 1.5),
+                hud::set_opacity("hello:coords", 0.8),
+                hud::set_z_index("hello:coords", 1),
+            );
+            info!(
+                "hud: bounds_after={:?} contains={} text={} visible={} enabled={}",
+                hud::get_bounds("hello:coords"),
+                hud::get_element("hello:coords")
+                    .is_some_and(|element| element.contains(hud::get_screen_size(), (10.0, 10.0))),
+                hud::set_text("hello:coords", "1, 64, -3"),
+                hud::set_visible("hello:fps", true),
+                hud::set_enabled("hello:fps", true),
+            );
+            info!(
+                "hud: layer={:?} layers={} click={} tooltip={} animation={} invalidate={:?}",
+                hud::get_layer("hello:info").map(|layer| layer.z_index),
+                hud::get_layers().len(),
+                hud::register_click_handler("hello:coords"),
+                hud::register_tooltip("hello:coords", "where you are"),
+                hud::register_animation("hello:coords"),
+                (
+                    hud::invalidate_layout(),
+                    hud::invalidate_render(),
+                    hud::request_redraw(),
+                ),
+            );
+            let (drawn, undrawn) = hud::flush();
+            info!(
+                "hud: flush drawn={drawn} undrawn={undrawn} known={} refusals={:?}",
+                hud::KNOWN_ELEMENTS.len(),
+                hud::refusals().into_iter().map(|(what, _)| what).collect::<Vec<_>>(),
+            );
+            info!(
+                "hud: unregister={} layer={} set_layer={}",
+                hud::unregister_element("hello:fps"),
+                hud::unregister_layer("hello:info"),
+                hud::set_layer("hello:coords", "minecraft:default"),
+            );
+        });
+
         // Section 5: what this mod holds, what it does not, and why.
         info!(
             "capabilities: known={} held={:?} render={} world_read={} unsupported_why={}",

@@ -70,7 +70,7 @@ guide, not a contract.
 | 32 | Shader APIs | 24 | todo |
 | 33 | Texture and sprite APIs | 29 | todo |
 | 34 | Models and animations | 50 | todo |
-| 35 | HUD and overlays | 32 | todo |
+| 35 | HUD and overlays | 32 | done | Elements with alignment, anchor, scale, opacity, layers, z index and priority, with real placement maths against the screen size; a flush draws the text on the overlay and counts the rest |
 | 36 | GUI and screen system | 45 | todo |
 | 37 | GUI widget library | 47 | todo |
 | 38 | Input handling | 58 | todo |
@@ -717,6 +717,25 @@ Verified in a run of the loader with the mod attached: a two-bone cube with boun
 an animation played to 250 ms, doubled in speed to 750 ms, held there by `pause`, and a
 crossfade giving a 50/50 blend; and a skeleton sampled at 250 ms of a 500 ms animation giving
 `(0, 1.05, 0)`, which is the interpolated midpoint of `1.0` and `1.1`.
+
+### 35 — HUD and overlays
+
+An element is real data — where it sits, how big it is, its alignment against the screen, the
+anchor it grows from, scale, opacity, layer, visibility, enabled, z index and priority — and
+`bounds` does the arithmetic: the alignment places it among the free space, the anchor takes
+its own size off the position, and the scale multiplies it. `get_screen_size` reads the
+window the loader was told about (`CINNALOADER_WINDOW`, which `tools/mcp.py` sets, falling
+back to the window facts), `get_scaled_size` divides it, and `get_safe_area` insets it by a
+margin. Layers are real, elements sort by layer, then z index, then priority, invalidation
+counters count, and tooltips, click handlers and animations are recorded.
+
+The drawing is the honest part: `flush` draws the *text* of every element that would be drawn
+as an overlay line and counts the rest, so a coordinates or FPS element works and a minimap
+does not — `why_unknown` says why for the drawing, an image element, a click handler and an
+animation. Verified in a run of the loader with the mod attached: elements placed at
+`(4, 4, 90, 12)` and at the bottom right, moved and scaled to `(8, 8, 150, 21)`, a hit test
+that found the pointer inside, two elements drawn and none undrawn, and the layer, tooltip,
+handler and invalidation calls all answering.
 
 ## Open: a wild jump on the first frame
 

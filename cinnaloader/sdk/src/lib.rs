@@ -58,6 +58,7 @@ pub mod events;
 pub mod fs;
 pub mod game;
 pub mod graphics;
+pub mod hud;
 pub mod i18n;
 pub mod inventory;
 pub mod items;
@@ -1293,6 +1294,9 @@ pub mod prelude {
     pub use crate::graphics::{
         self as graphics, Ledger, ResourceDesc, ResourceHandle, ResourceKind as GpuResourceKind,
         BACKENDS,
+    };
+    pub use crate::hud::{
+        self as hud, Alignment, Anchor, HudElement, HudLayer, KNOWN_ELEMENTS,
     };
     pub use crate::i18n::{self as i18n, Language, NumberStyle};
     pub use crate::inventory::{
