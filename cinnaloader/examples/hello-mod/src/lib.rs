@@ -5293,6 +5293,9 @@ impl Mod for Hello {
     fn tick(&mut self, dt_millis: u32) {
         let tick = self.ticks.fetch_add(1, Ordering::Relaxed) + 1;
         TICKS.store(tick, Ordering::Relaxed);
+        if tick % 60 == 1 {
+            info!("live: {}", cinnaloader::live::value("frame").unwrap_or_else(|| "none".into()));
+        }
         // A background result is picked up on the tick, never waited for.
         if let Some(result) = self.pool_result.as_ref() {
             if let Some(text) = result.get() {

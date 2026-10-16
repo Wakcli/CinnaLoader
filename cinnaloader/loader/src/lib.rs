@@ -10,7 +10,7 @@ use std::{
     ffi::{c_char, CStr, CString},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
         Mutex, OnceLock,
     },
 };
@@ -216,6 +216,52 @@ pub fn hand_over(host: Host) {
     }
 }
 
+/// The host's observation of the running client, process-wide, as `key<TAB>value` lines.
+static OBSERVATION: OnceLock<Mutex<String>> = OnceLock::new();
+
+fn observation_slot() -> &'static Mutex<String> {
+    OBSERVATION.get_or_init(|| Mutex::new(String::new()))
+}
+
+/// Replaces the host's observation of the running client, as `key<TAB>value` lines.
+pub fn set_observation(text: &str) {
+    if let Ok(mut observation) = observation_slot().lock() {
+        observation.clear();
+        observation.push_str(text);
+    }
+}
+
+/// Writes the current observation NUL-terminated, returning 1 when there was one to write.
+unsafe extern "C" fn host_observe(out: *mut c_char, capacity: usize) -> i32 {
+    let text = observation_slot()
+        .lock()
+        .map(|observation| observation.clone())
+        .unwrap_or_default();
+    write_text((!text.is_empty()).then_some(text), out, capacity)
+}
+
+/// Frames the host has been advanced, for the observation baseline.
+static FRAMES: AtomicU64 = AtomicU64::new(0);
+/// Mod ticks delivered, for the observation baseline.
+static TICKS: AtomicU64 = AtomicU64::new(0);
+/// The last phase the loader walked, for the observation baseline.
+static PHASE: AtomicU32 = AtomicU32::new(u32::MAX);
+
+/// Publishes the loader's own view of the client, so a mod has something real to read before
+/// any client read exists. One frame is one call here, from the client's frame hook or the
+/// CLI's tick loop.
+fn note_baseline(mods: usize) {
+    let frames = FRAMES.fetch_add(1, Ordering::Relaxed) + 1;
+    let ticks = TICKS.load(Ordering::Relaxed);
+    let phase = match Phase::from_code(PHASE.load(Ordering::Relaxed)) {
+        Some(phase) => phase.name(),
+        None => "tick",
+    };
+    set_observation(&format!(
+        "frame\t{frames}\nticks\t{ticks}\nmods\t{mods}\nphase\t{phase}"
+    ));
+}
+
 /// One client frame: the render phases around one tick. The preload's frame hook calls this
 /// each frame, so mods tick at the client's rate and see frame boundaries.
 pub fn frame(dt_millis: u32) {
@@ -230,6 +276,7 @@ pub fn frame(dt_millis: u32) {
 
 /// Hands one phase to every mod. The client's frame hook drives the render phases with it.
 pub fn walk_phase(phase: Phase) {
+    PHASE.store(phase.code(), Ordering::Relaxed);
     if let Ok(mut slot) = host_slot().lock() {
         if let Some(host) = slot.as_mut() {
             host.walk(phase);
@@ -1275,6 +1322,7 @@ impl Host {
     /// Advances every enabled mod's frame by `dt_millis`. A mod that panics is switched
     /// off and skipped from then on, so the others keep running.
     pub fn tick(&mut self, dt_millis: u32) {
+        note_baseline(self.mods.len());
         for module in &self.mods {
             if !mod_enabled(&module.name) || mod_failed(&module.name) {
                 continue;
@@ -1283,6 +1331,7 @@ impl Host {
                 enter_mod(&module.name);
                 let code = frame(dt_millis);
                 leave_mod();
+                TICKS.fetch_add(1, Ordering::Relaxed);
                 if code != 0 {
                     mark_failed(&module.name);
                 }
@@ -1478,6 +1527,7 @@ fn host_api(dir: *const c_char, name: *const c_char) -> HostApi {
         report: Some(host_report),
         graph: Some(host_graph),
         mods_command: Some(host_mods_command),
+        observe: Some(host_observe),
     }
 }
 
@@ -1840,5 +1890,24 @@ mod tests {
         assert_eq!(registry.cycles.len(), 1);
         assert!(cinnaloader::mods::explain_load_order()[1].starts_with("hello_mod after"));
         assert!(!cinnaloader::mods::validate_dependency_graph().is_empty());
+    }
+
+    #[test]
+    fn the_live_observation_the_loader_writes_is_what_the_sdk_reads() {
+        let _serial = serial();
+        set_observation("frame\t7\nticks\t9\nmods\t1\nphase\ttick");
+        let dir = CString::new("/tmp").unwrap();
+        let name = CString::new("hello_mod").unwrap();
+        let api = host_api(dir.as_ptr(), name.as_ptr());
+        // SAFETY: the table outlives the calls below and every slot is a loader callback.
+        assert_eq!(unsafe { cinnaloader::install(&api) }, 0);
+
+        let observation = cinnaloader::live::observation();
+        assert!(observation.contains("frame\t7"), "{observation:?}");
+        assert_eq!(cinnaloader::live::value("frame"), Some("7".to_owned()));
+        assert_eq!(cinnaloader::live::value("missing"), None);
+        assert_eq!(cinnaloader::live::u64("frame"), Some(7));
+        assert_eq!(cinnaloader::live::text("phase"), Some("tick".to_owned()));
+        assert_eq!(cinnaloader::live::f32("missing"), None);
     }
 }

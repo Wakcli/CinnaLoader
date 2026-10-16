@@ -134,6 +134,7 @@ pub mod input;
 pub mod inventory;
 pub mod items;
 pub mod lifecycle;
+pub mod live;
 pub mod log;
 pub mod loot;
 pub mod metadata;
@@ -169,7 +170,8 @@ pub mod worldgen;
 /// [`Mod`] crate declared a different value is refused at load.
 ///
 /// 8: the graph and `mods_command` slots, and a manifest declared before load.
-pub const ABI_VERSION: u32 = 8;
+/// 9: the `observe` slot, the host's view of the running client.
+pub const ABI_VERSION: u32 = 9;
 
 /// One lock for the tests of every module that touches a process-wide registry, so two
 /// tests never drain each other's queue.
@@ -286,7 +288,10 @@ pub struct HostApi {
     /// Writes the registry and dependency graph, one `key=value` per line.
     pub graph: Option<unsafe extern "C" fn(out: *mut c_char, capacity: usize) -> i32>,
     /// Runs one command on another mod: 0 enable, 1 disable, 2 is enabled, 3 is loaded.
-    pub mods_command: Option<unsafe extern "C" fn(verb: u32, id: *const c_char) -> i32>
+    pub mods_command: Option<unsafe extern "C" fn(verb: u32, id: *const c_char) -> i32>,
+    /// Writes the host's view of the running client as `key<TAB>value` lines; 0 when the
+    /// host has nothing to report (a host outside a client, or one with no client reads).
+    pub observe: Option<unsafe extern "C" fn(out: *mut c_char, capacity: usize) -> i32>
 }
 
 /// A rate the loader's tick can drive: `Timer::every(1000)` fires about once a second.
@@ -404,6 +409,7 @@ slot!(DECLARE, unsafe extern "C" fn(*const c_char) -> i32);
 slot!(GRAPH, unsafe extern "C" fn(*mut c_char, usize) -> i32);
 slot!(MODS_COMMAND, unsafe extern "C" fn(u32, *const c_char) -> i32);
 slot!(REPORT, unsafe extern "C" fn(*mut c_char, usize) -> i32);
+slot!(OBSERVE, unsafe extern "C" fn(*mut c_char, usize) -> i32);
 
 /// Writes one line through the loader, falling back to stderr before `load`.
 pub fn log(level: u32, message: &str) {
@@ -862,6 +868,7 @@ pub unsafe fn install(api: *const HostApi) -> i32 {
     store(&GRAPH, api.graph);
     store(&MODS_COMMAND, api.mods_command);
     store(&REPORT, api.report);
+    store(&OBSERVE, api.observe);
     store(&REGISTER_FEATURE, api.feature);
     0
 }
@@ -1713,6 +1720,7 @@ pub use crate::tools::{
     pub use crate::items::{self as items, Component as ItemComponent, ItemStack, ItemType};
     pub use crate::diagnostics;
     pub use crate::log::{self as log, Level, Logger, Record};
+    pub use crate::live;
     pub use crate::mods;
     pub use crate::physics::{
         self as physics, bounding_box, Body, Ray, RayHit, GRAVITY, TERMINAL_VELOCITY
@@ -1915,13 +1923,14 @@ mod tests {
             declare: None,
             report: None,
             graph: None,
-            mods_command: None
+            mods_command: None,
+            observe: None
         }
     }
 
     #[test]
     fn abi_version_is_stable() {
-        assert_eq!(ABI_VERSION, 8);
+        assert_eq!(ABI_VERSION, 9);
     }
 
     #[test]
