@@ -7,6 +7,7 @@
 
 mod ingame;
 mod panel;
+mod probe;
 
 use std::path::PathBuf;
 
@@ -23,6 +24,7 @@ fn start() {
     }
     std::env::set_var(ACTIVE_ENV, "1");
     prefer_x11();
+    probe::report();
 
     cinnaloader_loader::set_host_facts(host_facts());
 

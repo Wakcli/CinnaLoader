@@ -620,6 +620,7 @@ name = "cinnaloader-cli"
 version = "0.1.0"
 dependencies = [
  "cinnaloader-loader",
+ "cinnaloader-native",
 ]
 
 [[package]]

@@ -11,3 +11,4 @@ path = "src/main.rs"
 
 [dependencies]
 cinnaloader-loader = { path = "../loader", features = ["gui"] }
+cinnaloader-native = { path = "../native" }

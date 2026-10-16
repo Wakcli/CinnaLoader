@@ -9,6 +9,10 @@ use std::{
 };
 
 use cinnaloader_loader::Host;
+use cinnaloader_native::symbols::Symbols;
+
+#[path = "../../preload/src/probe.rs"]
+mod probe;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -61,6 +65,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             let dir = dir_arg(args.get(1))?;
             overlay(&dir)
         }
+        Some("probe") => probe(args.get(1)),
         Some("launch") => {
             let client = args.get(1).ok_or("launch needs a client executable path")?;
             let dir = parse_mods_flag(args)?.unwrap_or_else(|| PathBuf::from("cinnaloader"));
@@ -74,6 +79,18 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             "unknown command `{other}` (try `cinnaloader help`)"
         )),
     }
+}
+
+/// Parses an ELF's symbols and prints which capability suffixes it contains. Called
+/// with the running binary when no path is given.
+fn probe(path: Option<&String>) -> Result<ExitCode, String> {
+    let path = path.map_or_else(|| PathBuf::from("/proc/self/exe"), PathBuf::from);
+    let Ok(symbols) = Symbols::from_path(&path) else {
+        println!("usage: cinnaloader probe [BINARY]   (default: /proc/self/exe)");
+        return Ok(ExitCode::SUCCESS);
+    };
+    print!("{}", probe::format(&probe::from_symbols(&symbols)));
+    Ok(ExitCode::SUCCESS)
 }
 
 fn dir_arg(value: Option<&String>) -> Result<PathBuf, String> {
@@ -172,6 +189,7 @@ USAGE:
   cinnaloader overlay <MODS_DIR>           Visible always-on-top overlay of mod output
   cinnaloader clickgui <MODS_DIR>          ClickGUI (mod toggles) toggled by RShift
   cinnaloader launch <CLIENT> [--mods DIR] Run the client with the loader attached
+  cinnaloader probe [BINARY]               Show which client symbols each capability resolves
   cinnaloader help
 
 ENVIRONMENT:
