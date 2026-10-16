@@ -1056,7 +1056,7 @@ fn set_setting_value(id: &str, value: String) -> Option<String> {
         SettingKind::Toggle => "toggle",
         SettingKind::Slider => "number",
         SettingKind::Choice => "choice",
-        SettingKind::Keybind => "keybind",
+        SettingKind::Keybind => "keychange",
         SettingKind::Button => "press",
     };
     queue(kind, &mod_name, id, after.clone());
@@ -1111,7 +1111,7 @@ pub fn update_keys(pressed: &[String]) {
     *held = pressed.to_vec();
     drop(held);
     for (mod_name, id, down) in events {
-        queue("key", &mod_name, &id, u8::from(down).to_string());
+        queue("keybind", &mod_name, &id, u8::from(down).to_string());
     }
 }
 
@@ -1726,9 +1726,42 @@ mod tests {
         }
         leave_mod();
         assert_eq!(seen.len(), 2, "one press and one release: {seen:?}");
-        assert!(seen[0].starts_with("key\t"));
+        assert!(
+            seen[0].starts_with("keybind\t"),
+            "the SDK matches on this kind: {seen:?}"
+        );
         assert!(seen[0].ends_with("\t1"));
         assert!(seen[1].ends_with("\t0"));
+    }
+
+    #[test]
+    fn rebinding_a_key_queues_keychange_not_a_press() {
+        let _serial = serial();
+        let name = format!("cinnaloader-keychange-{}", std::process::id());
+        let scoped = format!("{name}:panic");
+        let id = CString::new(scoped.clone()).unwrap();
+        let label = CString::new("Panic").unwrap();
+        let category = CString::new("Debug").unwrap();
+        let key = CString::new("P").unwrap();
+        enter_mod(&name);
+        assert_eq!(
+            unsafe { host_keybind(id.as_ptr(), label.as_ptr(), category.as_ptr(), key.as_ptr()) },
+            1
+        );
+        leave_mod();
+
+        let _ = set_setting_value(&scoped, "G".to_owned());
+        enter_mod(&name);
+        let mut buffer = [0 as c_char; 128];
+        let mut seen = Vec::new();
+        while unsafe { host_take_event(buffer.as_mut_ptr(), buffer.len()) } == 1 {
+            // SAFETY: the host wrote a NUL-terminated event line.
+            seen.push(unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_string_lossy().into_owned());
+        }
+        leave_mod();
+        assert_eq!(seen.len(), 1, "a rebind is one event: {seen:?}");
+        assert!(seen[0].starts_with("keychange\t"), "{seen:?}");
+        assert!(seen[0].ends_with("\tG"), "{seen:?}");
     }
 
     #[test]

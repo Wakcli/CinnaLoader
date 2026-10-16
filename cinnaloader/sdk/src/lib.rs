@@ -934,6 +934,8 @@ pub trait Mod: Default + Send + 'static {
     fn choice(&mut self, _id: &str, _index: usize) {}
     /// Runs when one of this mod's keybinds is pressed or released.
     fn keybind(&mut self, _id: &str, _down: bool) {}
+    /// Runs when the user rebinds one of this mod's keys, with the key's new name.
+    fn keybind_changed(&mut self, _id: &str, _key: &str) {}
     /// Runs when the user presses one of this mod's buttons.
     fn pressed(&mut self, _id: &str) {}
 }
@@ -1110,6 +1112,9 @@ pub fn frame_body<T: Mod>(module: &mut T, dt_millis: u32, first: bool) -> i32 {
                             .with_text(&id),
                     );
                     module.keybind(&id, value == "1");
+                }
+                "keychange" => {
+                    module.keybind_changed(&id, &value);
                 }
                 "press" => {
                     events::publish(
