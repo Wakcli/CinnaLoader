@@ -5298,12 +5298,17 @@ impl Mod for Hello {
                 cinnaloader::live::value(key).unwrap_or_else(|| "none".into())
             };
             info!(
-                "live: frame={} session={} dimension={} hp={} hunger={}",
+                "live: frame={} session={} dimension={} hp={} hunger={} pos=({},{},{}) yaw={} pitch={}",
                 live("frame"),
                 live("session"),
                 live("dimension"),
                 live("hp"),
-                live("hunger")
+                live("hunger"),
+                live("pos_x"),
+                live("pos_y"),
+                live("pos_z"),
+                live("yaw"),
+                live("pitch")
             );
         }
         // A background result is picked up on the tick, never waited for.

@@ -101,6 +101,13 @@ pub const CAPABILITIES: &[Capability] = &[
             "GameplayHudState>::saturation",
         ],
     },
+    Capability {
+        name: "pose_read_live",
+        symbols: &[
+            "WorldAuthority>::local_player_unique_id",
+            "WorldAuthority>::actor_pose_by_unique",
+        ],
+    },
 ];
 
 /// One `(capability, symbol)` probe result, with the matched link-time address when
