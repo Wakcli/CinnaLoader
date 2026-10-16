@@ -5294,7 +5294,17 @@ impl Mod for Hello {
         let tick = self.ticks.fetch_add(1, Ordering::Relaxed) + 1;
         TICKS.store(tick, Ordering::Relaxed);
         if tick % 60 == 1 {
-            info!("live: {}", cinnaloader::live::value("frame").unwrap_or_else(|| "none".into()));
+            let live = |key: &str| {
+                cinnaloader::live::value(key).unwrap_or_else(|| "none".into())
+            };
+            info!(
+                "live: frame={} session={} dimension={} hp={} hunger={}",
+                live("frame"),
+                live("session"),
+                live("dimension"),
+                live("hp"),
+                live("hunger")
+            );
         }
         // A background result is picked up on the tick, never waited for.
         if let Some(result) = self.pool_result.as_ref() {

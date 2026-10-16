@@ -19,6 +19,7 @@ use cinnaloader_native::detour::{hook_closure_jmp_back, CallbackOption, HookFlag
 use cinnaloader_native::symbols;
 use device_query::Keycode;
 
+use crate::live;
 use crate::panel;
 
 const CAPTURE_SYMBOL: &str = "client_ui::ui_runtime::presentation::publish::capture_hud_frame";
@@ -83,6 +84,7 @@ pub fn install() {
         }
     };
 
+    live::install();
     let hook = unsafe {
         hook_closure_jmp_back(
             address,
@@ -94,6 +96,7 @@ pub fn install() {
                     previous
                 }));
                 loader::frame(u32::try_from(dt.as_millis()).unwrap_or(u32::MAX));
+                cinnaloader_loader::set_observation(&live::sample(regs));
                 let presentation = (*regs).rcx as *mut u8;
                 if presentation.is_null() {
                     return;

@@ -6,6 +6,7 @@
 //! loader menu in-frame by hooking the client's own F3 overlay publication.
 
 mod ingame;
+mod live;
 mod panel;
 mod probe;
 

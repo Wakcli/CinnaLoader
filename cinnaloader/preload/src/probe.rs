@@ -86,6 +86,21 @@ pub const CAPABILITIES: &[Capability] = &[
             "ModUi>::set_mod_panel_open",
         ],
     },
+    Capability {
+        name: "live_reads",
+        symbols: &[
+            "UiRuntime>::session_id",
+            "WorldStream>::current_dimension",
+            "UiRuntime>::local_player_alive",
+            "UiRuntime>::hud",
+            "ui::hud::HudStore>::health",
+            "ui::hud::HudStore>::hunger",
+            "ui::hud::BoundedStat>::current",
+            "ui::hud::BoundedStat>::maximum",
+            "UiRuntime>::gameplay_hud",
+            "GameplayHudState>::saturation",
+        ],
+    },
 ];
 
 /// One `(capability, symbol)` probe result, with the matched link-time address when

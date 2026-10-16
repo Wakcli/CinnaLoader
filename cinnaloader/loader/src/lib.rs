@@ -218,12 +218,19 @@ pub fn hand_over(host: Host) {
 
 /// The host's observation of the running client, process-wide, as `key<TAB>value` lines.
 static OBSERVATION: OnceLock<Mutex<String>> = OnceLock::new();
+/// The loader's own per-frame facts, which a client sample must not displace.
+static BASELINE: OnceLock<Mutex<String>> = OnceLock::new();
 
 fn observation_slot() -> &'static Mutex<String> {
     OBSERVATION.get_or_init(|| Mutex::new(String::new()))
 }
 
-/// Replaces the host's observation of the running client, as `key<TAB>value` lines.
+fn baseline_slot() -> &'static Mutex<String> {
+    BASELINE.get_or_init(|| Mutex::new(String::new()))
+}
+
+/// Replaces the client's contribution to the observation, as `key<TAB>value` lines. The
+/// loader's own baseline is kept and reported first, so a client read adds to it.
 pub fn set_observation(text: &str) {
     if let Ok(mut observation) = observation_slot().lock() {
         observation.clear();
@@ -233,10 +240,19 @@ pub fn set_observation(text: &str) {
 
 /// Writes the current observation NUL-terminated, returning 1 when there was one to write.
 unsafe extern "C" fn host_observe(out: *mut c_char, capacity: usize) -> i32 {
-    let text = observation_slot()
-        .lock()
-        .map(|observation| observation.clone())
-        .unwrap_or_default();
+    let read = |slot: &'static OnceLock<Mutex<String>>| {
+        slot.get()
+            .and_then(|held| held.lock().ok().map(|text| text.clone()))
+            .unwrap_or_default()
+    };
+    let baseline = read(&BASELINE);
+    let client = read(&OBSERVATION);
+    let text = match (baseline.is_empty(), client.is_empty()) {
+        (true, true) => String::new(),
+        (true, false) => client,
+        (false, true) => baseline,
+        (false, false) => format!("{baseline}\n{client}"),
+    };
     write_text((!text.is_empty()).then_some(text), out, capacity)
 }
 
@@ -247,9 +263,9 @@ static TICKS: AtomicU64 = AtomicU64::new(0);
 /// The last phase the loader walked, for the observation baseline.
 static PHASE: AtomicU32 = AtomicU32::new(u32::MAX);
 
-/// Publishes the loader's own view of the client, so a mod has something real to read before
-/// any client read exists. One frame is one call here, from the client's frame hook or the
-/// CLI's tick loop.
+/// Publishes the loader's own view of the client into the baseline, so a mod has something
+/// real to read before any client read exists. One frame is one call here, from the client's
+/// frame hook or the CLI's tick loop.
 fn note_baseline(mods: usize) {
     let frames = FRAMES.fetch_add(1, Ordering::Relaxed) + 1;
     let ticks = TICKS.load(Ordering::Relaxed);
@@ -257,9 +273,12 @@ fn note_baseline(mods: usize) {
         Some(phase) => phase.name(),
         None => "tick",
     };
-    set_observation(&format!(
-        "frame\t{frames}\nticks\t{ticks}\nmods\t{mods}\nphase\t{phase}"
-    ));
+    if let Ok(mut baseline) = baseline_slot().lock() {
+        baseline.clear();
+        baseline.push_str(&format!(
+            "frame\t{frames}\nticks\t{ticks}\nmods\t{mods}\nphase\t{phase}"
+        ));
+    }
 }
 
 /// One client frame: the render phases around one tick. The preload's frame hook calls this
